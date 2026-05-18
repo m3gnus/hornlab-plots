@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hornlab-plots"
+version = "0.1.0"
+description = "Canonical visualization stack for HornLab (directivity heatmaps, polar plots, frequency response, impedance)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "Pillow",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: visual-parity tests that render real PNGs",
+]
