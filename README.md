@@ -88,8 +88,7 @@ Not published to PyPI; lives in the private workspace.
 
 ## Migration status
 
-This package is the target of the canonical-plots migration. See
-`docs/plans/canonical-plots-migration.md` for the deprecation roadmap.
-Legacy modules at `Waveguide-Generator/server/solver/directivity_plot.py`
-and `server/solver/charts.py` will be removed after WG flips
-`use_hornlab_plots` default to `True` and a soak period elapses.
+This package is the canonical plot renderer for HornLab. The legacy WG
+modules at `Waveguide-Generator/server/solver/directivity_plot.py` and
+`server/solver/charts.py` were removed on 2026-05-23 after byte-identical
+gate evidence.

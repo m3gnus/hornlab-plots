@@ -4,9 +4,9 @@ The public entry points (`directivity_heatmap_b64`, `save_directivity_plot`,
 `directivity_heatmap_from_legacy_dict`) are wired in `__init__.py`. This
 module owns the actual rendering primitives.
 
-Byte-equivalence note: the heatmap code is extracted unchanged from
-`Waveguide-Generator/server/solver/directivity_plot.py`. The legacy
-``[[angle, dB], ...]`` per-frequency dict shape is preserved via the
+Byte-equivalence note: the heatmap code was extracted unchanged from the
+former WG directivity renderer. The legacy ``[[angle, dB], ...]``
+per-frequency dict shape is preserved via the
 adapter ``directivity_heatmap_from_legacy_dict``; new callers should
 prefer the numpy-array signature ``directivity_heatmap_b64``.
 """
@@ -478,8 +478,8 @@ def directivity_heatmap_from_legacy_dict(
             "diagonal":   [...],
         }
 
-    This is the byte-equivalent replacement for WG's
-    ``solver.directivity_plot.render_directivity_plot``.
+    This is the byte-equivalent replacement for WG's former
+    ``render_directivity_plot`` entry point.
 
     Returns None when there are no plottable patterns.
     """

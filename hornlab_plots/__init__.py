@@ -20,6 +20,8 @@ Public API:
 - ``render_all_charts_b64(payload)`` — convenience: returns dict with
   ``frequency_response``, ``directivity_index``, ``impedance``,
   ``directivity_map`` keys.
+- ``hornlab_plots.complex_analysis`` — complex-pressure analysis plots used
+  by WG's ``/api/render-complex-analysis`` route and CLI wrapper.
 
 Lower-level primitives:
 

@@ -1,9 +1,7 @@
 """Line-chart renderers for frequency response, DI, and impedance.
 
-Mirrors the byte-equivalent behaviour of
-``Waveguide-Generator/server/solver/charts.py``. Re-uses the canonical
-``_grid`` helpers from this package so the log-grid styling is shared
-with the directivity heatmap.
+Re-uses the canonical ``_grid`` helpers from this package so the log-grid
+styling is shared with the directivity heatmap.
 """
 
 from __future__ import annotations
@@ -228,9 +226,8 @@ def _build_impedance_figure(frequencies, real, imaginary):
 def render_all_charts_b64(payload, dpi=150):
     """Render all charts from a combined results payload.
 
-    Mirrors ``solver.charts.render_all_charts`` in WG. Returns a dict
-    with keys ``frequency_response``, ``directivity_index``, ``impedance``,
-    ``directivity_map`` — each a base64 PNG or None.
+    Returns a dict with keys ``frequency_response``, ``directivity_index``,
+    ``impedance``, ``directivity_map`` — each a base64 PNG or None.
     """
     from ._heatmap import directivity_heatmap_from_legacy_dict
 
