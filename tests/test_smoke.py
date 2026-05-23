@@ -86,6 +86,68 @@ def test_directivity_heatmap_b64_with_title_kwarg():
     assert _is_valid_b64_png(b64)
 
 
+def test_prepare_polar_line_data_selects_nearest_and_normalizes():
+    freqs = np.array([100.0, 200.0, 400.0])
+    angles = np.array([0.0, 30.0, 60.0, 90.0])
+    db = np.array([
+        [10.0, 7.0, 4.0, 1.0],
+        [12.0, 8.0, 2.0, -2.0],
+        [14.0, 9.0, 1.0, -5.0],
+    ])
+
+    out_angles, selected_freqs, rows = hlp.prepare_polar_line_data(
+        freqs,
+        angles,
+        db,
+        [180.0, 390.0],
+        angle_max_deg=60.0,
+    )
+
+    np.testing.assert_allclose(out_angles, [0.0, 30.0, 60.0])
+    np.testing.assert_allclose(selected_freqs, [200.0, 400.0])
+    np.testing.assert_allclose(rows, [[0.0, -4.0, -10.0], [0.0, -5.0, -13.0]])
+
+
+def test_polar_line_b64_accepts_complex_pressure():
+    freqs = np.array([100.0, 200.0, 400.0])
+    angles = np.linspace(0.0, 90.0, 7)
+    amp = np.vstack([
+        1.0 - 0.002 * angles,
+        1.0 - 0.004 * angles,
+        1.0 - 0.006 * angles,
+    ])
+    pressure = amp * np.exp(1j * np.deg2rad(angles))[None, :]
+
+    b64 = hlp.polar_line_b64(
+        freqs,
+        angles,
+        pressure,
+        [100.0, 350.0],
+        angle_max_deg=90.0,
+        title="H fixed-frequency polar",
+    )
+    assert _is_valid_b64_png(b64)
+
+
+def test_save_polar_line_plot_to_disk(tmp_path):
+    freqs = np.array([100.0, 200.0, 400.0])
+    angles = np.linspace(0.0, 90.0, 7)
+    db = np.tile(-0.1 * angles[None, :], (freqs.size, 1))
+
+    out = tmp_path / "polar_lines.png"
+    result = hlp.save_polar_line_plot(
+        out,
+        freqs,
+        angles,
+        db,
+        [100.0, 400.0],
+        angle_max_deg=90.0,
+    )
+    assert result == out
+    assert out.exists()
+    assert out.stat().st_size > 500
+
+
 def test_frequency_response_b64():
     freqs = np.geomspace(100.0, 20000.0, 30)
     spl = 100.0 + 3.0 * np.sin(np.log10(freqs))

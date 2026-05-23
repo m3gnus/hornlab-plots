@@ -20,6 +20,8 @@ Public API:
 - ``render_all_charts_b64(payload)`` — convenience: returns dict with
   ``frequency_response``, ``directivity_index``, ``impedance``,
   ``directivity_map`` keys.
+- ``polar_line_b64(...)`` / ``save_polar_line_plot(...)`` — fixed-frequency
+  polar line plots from complex pressure or dB arrays.
 - ``hornlab_plots.complex_analysis`` — complex-pressure analysis plots used
   by WG's ``/api/render-complex-analysis`` route and CLI wrapper.
 
@@ -57,6 +59,11 @@ from .charts import (
     render_all_charts_b64,
     save_impedance_plot,
 )
+from ._polar import (
+    polar_line_b64,
+    prepare_polar_line_data,
+    save_polar_line_plot,
+)
 
 __version__ = "0.1.0"
 
@@ -69,6 +76,9 @@ __all__ = [
     "prepare_heatmap_data",
     "build_grid_from_legacy",
     "check_symmetry",
+    "prepare_polar_line_data",
+    "polar_line_b64",
+    "save_polar_line_plot",
     # Line charts
     "frequency_response_b64",
     "directivity_index_b64",
