@@ -1,9 +1,8 @@
 """Smoke tests: each public plot function produces a base64 PNG without
 crashing on a small synthetic dataset.
 
-These tests prove the package wires up correctly — they don't verify
-visual parity with WG's legacy renderer (that's covered separately in
-``test_wg_parity.py``).
+These tests prove the package wires up correctly. The post-deletion canonical
+renderer contract is covered separately in ``test_canonical_renderers.py``.
 """
 
 from __future__ import annotations

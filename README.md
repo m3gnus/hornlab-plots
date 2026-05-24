@@ -10,13 +10,12 @@ impedance.
 
 ## Why this package exists
 
-The memory rule "Heatmaps via WG render-directivity, never matplotlib"
-existed because the canonical plot code lived inside the Waveguide-
-Generator server, only reachable via `/api/render-directivity` (which
-needs the WG dev server up) or by importing leading-underscore private
-helpers across a `sys.path.insert(WG_SERVER)` boundary. Every consumer
-that wanted offline plotting fell back to hand-rolled matplotlib, which
-broke cross-run comparability and visual consistency.
+The old memory rule "Heatmaps via WG render-directivity, never matplotlib"
+existed because the plot code used to live inside the Waveguide-Generator
+server, behind `/api/render-directivity` (which needed the WG dev server up)
+or leading-underscore private helpers imported across a
+`sys.path.insert(WG_SERVER)` boundary. That route is now only a WG browser UI
+wrapper around this package; non-WG consumers import `hornlab_plots` directly.
 
 `hornlab-plots` is the canonical import — `pip install -e .` it into
 any venv and call the functions directly. The WG HTTP routes become
