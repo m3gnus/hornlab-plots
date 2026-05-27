@@ -58,6 +58,8 @@ from .charts import (
     impedance_b64,
     render_all_charts_b64,
     save_impedance_plot,
+    set_spl_window,
+    spl_window,
 )
 from ._polar import (
     polar_line_b64,
@@ -85,6 +87,8 @@ __all__ = [
     "impedance_b64",
     "save_impedance_plot",
     "render_all_charts_b64",
+    "set_spl_window",
+    "spl_window",
     # Tick / grid helpers
     "log_grid_lines",
     "preferred_frequency_ticks",

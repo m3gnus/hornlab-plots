@@ -20,6 +20,45 @@ from matplotlib.ticker import FuncFormatter
 from ._grid import freq_formatter, log_grid_lines, preferred_frequency_ticks
 
 
+def spl_window(
+    curves,
+    *,
+    span_db: float = 40.0,
+    top_margin_db: float = 3.0,
+    floor_db: float | None = None,
+) -> tuple[float, float] | None:
+    """Return a compact SPL y-window for one or more plotted curves."""
+    finite_values = []
+    for curve in curves:
+        values = np.asarray(curve, dtype=float)
+        finite = values[np.isfinite(values)]
+        if finite.size:
+            finite_values.append(finite)
+    if not finite_values:
+        return None
+
+    top = float(max(np.max(values) for values in finite_values)) + top_margin_db
+    bottom = top - span_db
+    if floor_db is not None and bottom < floor_db:
+        bottom = floor_db
+        top = bottom + span_db
+    return bottom, top
+
+
+def set_spl_window(
+    ax,
+    curves,
+    *,
+    span_db: float = 40.0,
+    top_margin_db: float = 3.0,
+    floor_db: float | None = None,
+) -> None:
+    """Apply a compact SPL y-window to a Matplotlib axes."""
+    window = spl_window(curves, span_db=span_db, top_margin_db=top_margin_db, floor_db=floor_db)
+    if window is not None:
+        ax.set_ylim(*window)
+
+
 def _setup_dark_axes(ax, xlabel, ylabel, title):
     """Apply dark theme styling to axes."""
     ax.set_facecolor("#1a1a1a")
@@ -78,9 +117,7 @@ def frequency_response_b64(frequencies, spl, dpi=150):
     ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
     ax.set_xlim(freqs[0], freqs[-1])
-    spl_min, spl_max = np.nanmin(spl_vals), np.nanmax(spl_vals)
-    margin = max(2, (spl_max - spl_min) * 0.1)
-    ax.set_ylim(spl_min - margin, spl_max + margin)
+    set_spl_window(ax, [spl_vals])
 
     _add_log_grid(ax, freqs[0], freqs[-1])
 
