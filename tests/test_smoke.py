@@ -154,6 +154,36 @@ def test_frequency_response_b64():
     assert _is_valid_b64_png(b64)
 
 
+def test_frequency_response_multi_b64():
+    freqs = np.geomspace(100.0, 20000.0, 30)
+    lf = 100.0 - 12.0 * np.log10(freqs / 800.0).clip(min=0.0)
+    hf = 100.0 + 12.0 * np.log10(freqs / 800.0).clip(max=0.0)
+    combined = np.maximum(lf, hf) + 1.5
+    b64 = hlp.frequency_response_multi_b64(
+        [
+            hlp.FrequencyResponseCurve(freqs, lf, "LF LR4 LP", role="lf", crossover=True),
+            hlp.FrequencyResponseCurve(freqs, hf, "HF LR4 HP", role="hf", crossover=True),
+            hlp.FrequencyResponseCurve(freqs, combined, "Combined", role="combined"),
+        ],
+        title="Synthetic crossover",
+        crossover_hz=800.0,
+    )
+    assert _is_valid_b64_png(b64)
+
+
+def test_save_frequency_response_plot_to_disk(tmp_path):
+    freqs = np.geomspace(100.0, 20000.0, 16)
+    spl = 100.0 + 2.0 * np.sin(np.log10(freqs))
+    out = tmp_path / "response.png"
+    result = hlp.save_frequency_response_plot(
+        out,
+        [hlp.FrequencyResponseCurve(freqs, spl, "Combined", role="combined")],
+    )
+    assert result == out
+    assert out.exists()
+    assert out.stat().st_size > 500
+
+
 def test_directivity_index_b64_flat_list():
     freqs = np.geomspace(100.0, 20000.0, 30)
     di = 6.0 + 3.0 * np.log10(freqs / 1000.0)

@@ -62,6 +62,14 @@ CYCLIC_CMAP = LinearSegmentedColormap.from_list(
 
 # Line palette for multi-trace plots --------------------------------------
 LINE_COLORS = ["#4FC3F7", "#E8A83A", "#EF5350", "#66BB6A", "#AB47BC", "#78909C"]
+RESPONSE_COLORS = {
+    "lf": "#4FC3F7",
+    "mf": "#E8A83A",
+    "hf": "#EF5350",
+    "combined": "#EAF2FF",
+    "raw": "#78909C",
+    "other": "#AB47BC",
+}
 
 
 # Common axis grid alpha settings -----------------------------------------

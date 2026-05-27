@@ -53,10 +53,13 @@ from ._heatmap import (
     save_directivity_plot,
 )
 from .charts import (
+    FrequencyResponseCurve,
     directivity_index_b64,
     frequency_response_b64,
+    frequency_response_multi_b64,
     impedance_b64,
     render_all_charts_b64,
+    save_frequency_response_plot,
     save_impedance_plot,
     set_spl_window,
     spl_window,
@@ -83,10 +86,13 @@ __all__ = [
     "save_polar_line_plot",
     # Line charts
     "frequency_response_b64",
+    "frequency_response_multi_b64",
     "directivity_index_b64",
     "impedance_b64",
+    "save_frequency_response_plot",
     "save_impedance_plot",
     "render_all_charts_b64",
+    "FrequencyResponseCurve",
     "set_spl_window",
     "spl_window",
     # Tick / grid helpers

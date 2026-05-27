@@ -50,13 +50,45 @@ b64 = hlp.directivity_heatmap_b64(
 
 # Line plots.
 b64 = hlp.frequency_response_b64(freqs, spl)
+b64 = hlp.frequency_response_multi_b64(
+    [
+        hlp.FrequencyResponseCurve(freqs, lf_lp_db, "LF LR4 LP", role="lf", crossover=True),
+        hlp.FrequencyResponseCurve(freqs, hf_hp_db, "HF LR4 HP", role="hf", crossover=True),
+        hlp.FrequencyResponseCurve(freqs, combined_db, "Combined", role="combined"),
+    ],
+    title="LR4 combined on-axis response",
+    crossover_hz=800.0,
+)
 b64 = hlp.directivity_index_b64(freqs, di_per_plane)
 b64 = hlp.impedance_b64(freqs, z_real, z_imag)
 
 # Save to disk.
 hlp.save_directivity_plot(path, frequencies, directivity)
+hlp.save_frequency_response_plot(path, curves, title="On-axis response")
 hlp.save_impedance_plot(path, freqs, z_real, z_imag)
 ```
+
+### Canonical Frequency-Response Rules
+
+- Use `frequency_response_multi_b64()` or `save_frequency_response_plot()`
+  for every new on-axis response plot. Local matplotlib response plots should
+  be temporary only.
+- Use the role colors: `lf` = blue/cyan, `mf` = amber, `hf` = red, and
+  `combined` = bright near-white. These are defined in
+  `hornlab_plots.style.RESPONSE_COLORS` and sit on the same Arctic Night
+  background as the canonical heatmap.
+- Use solid lines for raw/source responses. Set `crossover=True` for
+  crossover-applied component traces (`LR4 LP`, `LR4 HP`, band-pass, etc.);
+  those render as dotted traces. The summed response uses `role="combined"`
+  and renders thicker/solid.
+- Pass `crossover_hz` for crossover plots. The renderer draws a dashed
+  vertical marker so the filtered component behavior is legible.
+- Keep the visible y-axis focused: the renderer defaults to a 40 dB SPL
+  window with a small headroom above the loudest finite curve point. Deep
+  filter tails and numerical dropouts should not decide the plot scale.
+- Component curves in combined plots should be physically or intentionally
+  level matched before plotting. Do not hide a real gain mismatch by
+  display-normalizing without saying so in the label.
 
 Lower-level helpers that take a matplotlib `Axes` for composition:
 
