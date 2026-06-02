@@ -1,12 +1,12 @@
 # hornlab-plots
 
-Canonical visualization stack for the HornLab BEM pipeline.
+Reusable visualization stack for acoustic simulation results.
 
-This is the **render** half of the canonical pipeline. It sits alongside
-`hornlab-mesher` (geometry → `.msh`) and `hornlab-solver` (`.msh` →
-result NPZs / dicts) and consumes the numpy arrays they produce to draw
-directivity heatmaps, polar line plots, frequency response, DI, and
-impedance.
+This package renders directivity heatmaps, polar line plots, frequency
+response, DI, and impedance from numpy arrays or lightweight payloads. It can
+be used standalone or as the render layer for a BEM pipeline such as
+`hornlab-mesher` (geometry → `.msh`) and `hornlab-solver` (`.msh` → result
+NPZs / dicts).
 
 ## Why this package exists
 
@@ -113,13 +113,13 @@ from hornlab_plots.style import (
 pip install -e ~/Code/HornLab/hornlab-plots
 ```
 
-Same pattern as `hornlab-mesher` and `hornlab-solver`: a sibling
-package under `HornLab/`, installed editable into each consumer venv.
-Not published to PyPI; lives in the private workspace.
+During HornLab development this follows the same editable-install pattern as
+`hornlab-mesher` and `hornlab-solver`: install it into each consumer venv from
+the workspace checkout. The package is not currently published to PyPI.
 
 ## Migration status
 
-This package is the canonical plot renderer for HornLab. The legacy WG
+Within HornLab, this package is the canonical plot renderer. The legacy WG
 modules at `Waveguide-Generator/server/solver/directivity_plot.py` and
 `server/solver/charts.py` were removed on 2026-05-23 after byte-identical
 gate evidence.
