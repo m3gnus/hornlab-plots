@@ -1,7 +1,7 @@
 """Canonical visualization stack for HornLab.
 
 The render half of the canonical BEM pipeline. Sibling to
-``hornlab-mesher`` (geometry → ``.msh``) and ``hornlab-solver``
+``hornlab-mesher`` (geometry → ``.msh``) and ``hornlab-bempp-bem``
 (``.msh`` → results); consumes the numpy arrays they produce.
 
 Public API:
