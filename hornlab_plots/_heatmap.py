@@ -41,6 +41,7 @@ from .style import (
     GRID_COLOR,
     HEATMAP_CMAP,
     MAX_DB,
+    MESH_LIMIT_COLOR,
     MIN_DB,
     PRIMARY_GRID_ALPHA,
     REFERENCE_CONTOUR_COLOR,
@@ -233,13 +234,19 @@ def check_symmetry(h_values, v_values):
 # Single heatmap renderer
 # ---------------------------------------------------------------------------
 
-def render_single_heatmap(ax, freqs, angles, values, title, reference_level=-6.0):
+def render_single_heatmap(
+    ax, freqs, angles, values, title, reference_level=-6.0, mesh_valid_hz=None
+):
     """Render a single directivity heatmap onto the given matplotlib Axes.
 
     The freqs / angles / values arrays should already have been passed
     through `prepare_heatmap_data` for canonical look. Callers that want
     to overlay their own contours (e.g. BIGMEH baseline-overlay) call
     this and then add contours to the returned axes themselves.
+
+    ``mesh_valid_hz`` draws a vertical marker (and shades the band above it)
+    at the highest frequency the mesh resolves; results to the right are
+    under-resolved and increasingly inaccurate.
     """
     ax.set_facecolor(AXES_BG)
 
@@ -341,6 +348,18 @@ def render_single_heatmap(ax, freqs, angles, values, title, reference_level=-6.0
         if angles[0] < a < angles[-1]:
             ax.axhline(a, color=GRID_COLOR, alpha=SECONDARY_GRID_ALPHA, linewidth=0.5)
 
+    mesh_valid_handle = None
+    if mesh_valid_hz and freqs[0] < float(mesh_valid_hz) < freqs[-1]:
+        ax.axvspan(float(mesh_valid_hz), freqs[-1], color=MESH_LIMIT_COLOR, alpha=0.12, zorder=2)
+        mesh_valid_handle = ax.axvline(
+            float(mesh_valid_hz),
+            color=MESH_LIMIT_COLOR,
+            linestyle="--",
+            linewidth=2.0,
+            label=f"mesh-valid {float(mesh_valid_hz):.0f} Hz",
+            zorder=3,
+        )
+
     ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
     ax.set_xlabel("Frequency [Hz]", color=TEXT_COLOR, fontsize=11)
     ax.set_ylabel("Angle [deg]", color=TEXT_COLOR, fontsize=11)
@@ -355,18 +374,24 @@ def render_single_heatmap(ax, freqs, angles, values, title, reference_level=-6.0
     cbar.ax.tick_params(colors=TICK_COLOR, labelsize=9)
     cbar.outline.set_edgecolor(SPINE_COLOR)
 
+    legend_handles = []
     if ref_contour is not None:
         from matplotlib.lines import Line2D
 
-        legend_line = Line2D(
-            [0],
-            [0],
-            color=REFERENCE_CONTOUR_COLOR,
-            linewidth=1.5,
-            label=f"ref @ {reference_level:g} dB",
+        legend_handles.append(
+            Line2D(
+                [0],
+                [0],
+                color=REFERENCE_CONTOUR_COLOR,
+                linewidth=1.5,
+                label=f"ref @ {reference_level:g} dB",
+            )
         )
+    if mesh_valid_handle is not None:
+        legend_handles.append(mesh_valid_handle)
+    if legend_handles:
         ax.legend(
-            handles=[legend_line],
+            handles=legend_handles,
             loc="upper right",
             fontsize=8,
             facecolor=AXES_BG,
@@ -416,10 +441,11 @@ def _build_planes_from_legacy(frequencies, directivity):
     return planes
 
 
-def _build_figure_from_planes(planes, reference_level=-6.0):
+def _build_figure_from_planes(planes, reference_level=-6.0, mesh_valid_hz=None):
     """Render planes into a matplotlib figure and return it.
 
     Collapses to a single H=V panel when both planes match within 1%.
+    ``mesh_valid_hz`` overlays the mesh-valid frequency marker on each panel.
     """
     by_key = {entry["key"]: entry for entry in planes}
     has_only_hv = set(by_key.keys()) == {"horizontal", "vertical"}
@@ -457,6 +483,7 @@ def _build_figure_from_planes(planes, reference_level=-6.0):
             plot_values,
             title,
             reference_level=reference_level,
+            mesh_valid_hz=mesh_valid_hz,
         )
 
     fig.tight_layout(pad=1.5)
@@ -509,13 +536,20 @@ def save_directivity_plot(
     directivity,
     dpi=150,
     reference_level=-6.0,
+    mesh_valid_hz=None,
 ):
-    """Render directivity heatmap(s) and save to ``output_path`` (PNG)."""
+    """Render directivity heatmap(s) and save to ``output_path`` (PNG).
+
+    ``mesh_valid_hz`` overlays the mesh-valid frequency marker; results above
+    it are under-resolved and increasingly inaccurate.
+    """
     planes = _build_planes_from_legacy(frequencies, directivity)
     if not planes:
         return None
 
-    fig = _build_figure_from_planes(planes, reference_level=reference_level)
+    fig = _build_figure_from_planes(
+        planes, reference_level=reference_level, mesh_valid_hz=mesh_valid_hz
+    )
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)

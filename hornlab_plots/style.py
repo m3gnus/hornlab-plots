@@ -44,6 +44,10 @@ HEATMAP_CMAP = LinearSegmentedColormap.from_list(
 CONTOUR_OUTLINE = "#050C18"
 REFERENCE_CONTOUR_COLOR = "#E8A83A"  # --accent-warm
 
+# Mesh-valid frequency marker: results above this frequency are under-resolved
+# and increasingly inaccurate. Warm red, distinct from the amber reference.
+MESH_LIMIT_COLOR = "#FF5A5A"
+
 
 # Complex-pressure diverging / cyclic palettes ----------------------------
 DIVERGING_CMAP = LinearSegmentedColormap.from_list(

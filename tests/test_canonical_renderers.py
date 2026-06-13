@@ -57,3 +57,43 @@ def test_line_chart_renderers_return_png():
     _decode_png(hlp.frequency_response_b64(freqs, spl))
     _decode_png(hlp.directivity_index_b64(freqs, di))
     _decode_png(hlp.impedance_b64(freqs, real, imag))
+
+
+def test_frequency_response_draws_mesh_valid_marker():
+    import matplotlib.pyplot as plt
+    from hornlab_plots.charts import _build_frequency_response_figure
+
+    freqs = np.geomspace(1000.0, 20000.0, 30)
+    spl = -60.0 - 5.0 * np.log10(freqs / 1000.0)
+    fig = _build_frequency_response_figure(
+        [hlp.FrequencyResponseCurve(freqs, spl, "HF", role="hf")],
+        mesh_valid_hz=11352.0,
+    )
+    ax = fig.axes[0]
+    labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert any("mesh-valid" in label for label in labels)
+    vertical_xs = [
+        float(line.get_xdata()[0])
+        for line in ax.get_lines()
+        if len(set(np.atleast_1d(line.get_xdata()).tolist())) == 1
+    ]
+    assert any(abs(x - 11352.0) < 1.0 for x in vertical_xs)
+    plt.close(fig)
+
+
+def test_directivity_heatmap_draws_mesh_valid_marker():
+    import matplotlib.pyplot as plt
+    from hornlab_plots._heatmap import _build_figure_from_planes, _build_planes_from_legacy
+
+    freqs = np.geomspace(1000.0, 20000.0, 12).tolist()
+    angles = np.linspace(0.0, 90.0, 13)
+    pattern = [[[float(a), -float(abs(a)) * 0.1] for a in angles] for _ in freqs]
+    planes = _build_planes_from_legacy(freqs, {"horizontal": pattern, "vertical": pattern})
+    fig = _build_figure_from_planes(planes, mesh_valid_hz=11352.0)
+    has_marker = any(
+        ax.get_legend() is not None
+        and any("mesh-valid" in t.get_text() for t in ax.get_legend().get_texts())
+        for ax in fig.axes
+    )
+    assert has_marker
+    plt.close(fig)
