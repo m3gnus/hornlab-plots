@@ -97,3 +97,47 @@ def test_directivity_heatmap_draws_mesh_valid_marker():
     )
     assert has_marker
     plt.close(fig)
+
+
+def test_frequency_response_draws_both_mesh_valid_limits():
+    import matplotlib.pyplot as plt
+    from hornlab_plots.charts import _build_frequency_response_figure
+
+    freqs = np.geomspace(1000.0, 20000.0, 30)
+    spl = -60.0 - 5.0 * np.log10(freqs / 1000.0)
+    fig = _build_frequency_response_figure(
+        [hlp.FrequencyResponseCurve(freqs, spl, "HF", role="hf")],
+        mesh_valid_hz=3642.0,
+        mesh_valid_radiating_hz=11352.0,
+    )
+    ax = fig.axes[0]
+    labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert any("mesh-valid" in label for label in labels)
+    assert any("aperture-valid" in label for label in labels)
+    vertical_xs = [
+        round(float(line.get_xdata()[0]))
+        for line in ax.get_lines()
+        if len(set(np.atleast_1d(line.get_xdata()).tolist())) == 1
+    ]
+    assert any(abs(x - 3642) < 2 for x in vertical_xs)
+    assert any(abs(x - 11352) < 2 for x in vertical_xs)
+    plt.close(fig)
+
+
+def test_directivity_heatmap_draws_both_mesh_valid_limits():
+    import matplotlib.pyplot as plt
+    from hornlab_plots._heatmap import _build_figure_from_planes, _build_planes_from_legacy
+
+    freqs = np.geomspace(1000.0, 20000.0, 12).tolist()
+    angles = np.linspace(0.0, 90.0, 13)
+    pattern = [[[float(a), -float(abs(a)) * 0.1] for a in angles] for _ in freqs]
+    planes = _build_planes_from_legacy(freqs, {"horizontal": pattern, "vertical": pattern})
+    fig = _build_figure_from_planes(planes, mesh_valid_hz=3642.0, mesh_valid_radiating_hz=11352.0)
+    labels = []
+    for ax in fig.axes:
+        legend = ax.get_legend()
+        if legend is not None:
+            labels.extend(t.get_text() for t in legend.get_texts())
+    assert any("mesh-valid" in label for label in labels)
+    assert any("aperture-valid" in label for label in labels)
+    plt.close(fig)

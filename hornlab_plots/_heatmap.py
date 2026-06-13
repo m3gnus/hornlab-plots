@@ -234,8 +234,52 @@ def check_symmetry(h_values, v_values):
 # Single heatmap renderer
 # ---------------------------------------------------------------------------
 
+def _draw_mesh_valid_markers(
+    ax,
+    *,
+    lo,
+    hi,
+    mesh_valid_hz=None,
+    mesh_valid_radiating_hz=None,
+    span_zorder=0,
+    line_zorder=3,
+):
+    """Draw the mesh-valid (solid) and aperture-valid (dashed) frequency lines.
+
+    ``mesh_valid_hz`` is the conservative fully-resolved limit; below it the
+    whole near field resolves the band. ``mesh_valid_radiating_hz`` is the
+    radiating-aperture limit; the band between the two is where only the
+    aperture (not the coarser near/far walls) is resolved, and is shaded.
+    Returns the legend handles drawn (empty when nothing falls in range).
+    """
+    eff = float(mesh_valid_hz) if mesh_valid_hz and float(mesh_valid_hz) > 0 else None
+    ap = float(mesh_valid_radiating_hz) if mesh_valid_radiating_hz and float(mesh_valid_radiating_hz) > 0 else None
+    handles = []
+    if eff is not None and ap is not None and eff != ap:
+        left, right = min(eff, ap), max(eff, ap)
+        ax.axvspan(max(lo, left), min(hi, right), color=MESH_LIMIT_COLOR, alpha=0.10, zorder=span_zorder)
+    elif eff is not None and lo < eff < hi:
+        ax.axvspan(eff, hi, color=MESH_LIMIT_COLOR, alpha=0.12, zorder=span_zorder)
+    if eff is not None and lo < eff < hi:
+        handles.append(
+            ax.axvline(
+                eff, color=MESH_LIMIT_COLOR, linestyle="-", linewidth=2.0,
+                label=f"mesh-valid {eff:.0f} Hz", zorder=line_zorder,
+            )
+        )
+    if ap is not None and lo < ap < hi:
+        handles.append(
+            ax.axvline(
+                ap, color=MESH_LIMIT_COLOR, linestyle="--", linewidth=2.0,
+                label=f"aperture-valid {ap:.0f} Hz", zorder=line_zorder,
+            )
+        )
+    return handles
+
+
 def render_single_heatmap(
-    ax, freqs, angles, values, title, reference_level=-6.0, mesh_valid_hz=None
+    ax, freqs, angles, values, title, reference_level=-6.0,
+    mesh_valid_hz=None, mesh_valid_radiating_hz=None,
 ):
     """Render a single directivity heatmap onto the given matplotlib Axes.
 
@@ -244,9 +288,9 @@ def render_single_heatmap(
     to overlay their own contours (e.g. BIGMEH baseline-overlay) call
     this and then add contours to the returned axes themselves.
 
-    ``mesh_valid_hz`` draws a vertical marker (and shades the band above it)
-    at the highest frequency the mesh resolves; results to the right are
-    under-resolved and increasingly inaccurate.
+    ``mesh_valid_hz`` (solid) is the conservative fully-resolved frequency and
+    ``mesh_valid_radiating_hz`` (dashed) the radiating-aperture frequency;
+    results to the right of each are increasingly under-resolved.
     """
     ax.set_facecolor(AXES_BG)
 
@@ -348,17 +392,15 @@ def render_single_heatmap(
         if angles[0] < a < angles[-1]:
             ax.axhline(a, color=GRID_COLOR, alpha=SECONDARY_GRID_ALPHA, linewidth=0.5)
 
-    mesh_valid_handle = None
-    if mesh_valid_hz and freqs[0] < float(mesh_valid_hz) < freqs[-1]:
-        ax.axvspan(float(mesh_valid_hz), freqs[-1], color=MESH_LIMIT_COLOR, alpha=0.12, zorder=2)
-        mesh_valid_handle = ax.axvline(
-            float(mesh_valid_hz),
-            color=MESH_LIMIT_COLOR,
-            linestyle="--",
-            linewidth=2.0,
-            label=f"mesh-valid {float(mesh_valid_hz):.0f} Hz",
-            zorder=3,
-        )
+    mesh_valid_handles = _draw_mesh_valid_markers(
+        ax,
+        lo=freqs[0],
+        hi=freqs[-1],
+        mesh_valid_hz=mesh_valid_hz,
+        mesh_valid_radiating_hz=mesh_valid_radiating_hz,
+        span_zorder=2,
+        line_zorder=3,
+    )
 
     ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
     ax.set_xlabel("Frequency [Hz]", color=TEXT_COLOR, fontsize=11)
@@ -387,8 +429,7 @@ def render_single_heatmap(
                 label=f"ref @ {reference_level:g} dB",
             )
         )
-    if mesh_valid_handle is not None:
-        legend_handles.append(mesh_valid_handle)
+    legend_handles.extend(mesh_valid_handles)
     if legend_handles:
         ax.legend(
             handles=legend_handles,
@@ -441,11 +482,14 @@ def _build_planes_from_legacy(frequencies, directivity):
     return planes
 
 
-def _build_figure_from_planes(planes, reference_level=-6.0, mesh_valid_hz=None):
+def _build_figure_from_planes(
+    planes, reference_level=-6.0, mesh_valid_hz=None, mesh_valid_radiating_hz=None
+):
     """Render planes into a matplotlib figure and return it.
 
     Collapses to a single H=V panel when both planes match within 1%.
-    ``mesh_valid_hz`` overlays the mesh-valid frequency marker on each panel.
+    ``mesh_valid_hz``/``mesh_valid_radiating_hz`` overlay the mesh-valid and
+    aperture-valid frequency markers on each panel.
     """
     by_key = {entry["key"]: entry for entry in planes}
     has_only_hv = set(by_key.keys()) == {"horizontal", "vertical"}
@@ -484,6 +528,7 @@ def _build_figure_from_planes(planes, reference_level=-6.0, mesh_valid_hz=None):
             title,
             reference_level=reference_level,
             mesh_valid_hz=mesh_valid_hz,
+            mesh_valid_radiating_hz=mesh_valid_radiating_hz,
         )
 
     fig.tight_layout(pad=1.5)
@@ -537,18 +582,23 @@ def save_directivity_plot(
     dpi=150,
     reference_level=-6.0,
     mesh_valid_hz=None,
+    mesh_valid_radiating_hz=None,
 ):
     """Render directivity heatmap(s) and save to ``output_path`` (PNG).
 
-    ``mesh_valid_hz`` overlays the mesh-valid frequency marker; results above
-    it are under-resolved and increasingly inaccurate.
+    ``mesh_valid_hz`` (solid) marks the conservative fully-resolved frequency
+    and ``mesh_valid_radiating_hz`` (dashed) the radiating-aperture frequency;
+    the band between them is where only the aperture is resolved.
     """
     planes = _build_planes_from_legacy(frequencies, directivity)
     if not planes:
         return None
 
     fig = _build_figure_from_planes(
-        planes, reference_level=reference_level, mesh_valid_hz=mesh_valid_hz
+        planes,
+        reference_level=reference_level,
+        mesh_valid_hz=mesh_valid_hz,
+        mesh_valid_radiating_hz=mesh_valid_radiating_hz,
     )
 
     out = Path(output_path)

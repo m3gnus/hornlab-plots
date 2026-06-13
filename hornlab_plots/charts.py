@@ -24,7 +24,6 @@ from .style import (
     DPI,
     FIGURE_BG,
     GRID_COLOR,
-    MESH_LIMIT_COLOR,
     PRIMARY_GRID_ALPHA,
     RESPONSE_COLORS,
     SECONDARY_GRID_ALPHA,
@@ -184,7 +183,7 @@ def _build_frequency_response_figure(
     crossover_hz: float | None = None,
     crossover_label: str | None = None,
     mesh_valid_hz: float | None = None,
-    mesh_valid_label: str | None = None,
+    mesh_valid_radiating_hz: float | None = None,
     xlim: tuple[float, float] | None = None,
     span_db: float = 40.0,
     top_margin_db: float = 3.0,
@@ -231,17 +230,19 @@ def _build_frequency_response_figure(
             zorder=1,
         )
 
-    if mesh_valid_hz is not None and float(mesh_valid_hz) > 0:
+    if mesh_valid_hz is not None or mesh_valid_radiating_hz is not None:
+        from ._heatmap import _draw_mesh_valid_markers
+
+        freq_lo = min(float(np.min(freqs)) for freqs, _values in plotted)
         freq_hi = max(float(np.max(freqs)) for freqs, _values in plotted)
-        if float(mesh_valid_hz) < freq_hi:
-            ax.axvspan(float(mesh_valid_hz), freq_hi, color=MESH_LIMIT_COLOR, alpha=0.10, zorder=0)
-        ax.axvline(
-            float(mesh_valid_hz),
-            color=MESH_LIMIT_COLOR,
-            linestyle="--",
-            linewidth=1.6,
-            label=mesh_valid_label or f"mesh-valid {float(mesh_valid_hz):.0f} Hz",
-            zorder=1,
+        _draw_mesh_valid_markers(
+            ax,
+            lo=freq_lo,
+            hi=freq_hi,
+            mesh_valid_hz=mesh_valid_hz,
+            mesh_valid_radiating_hz=mesh_valid_radiating_hz,
+            span_zorder=0,
+            line_zorder=1,
         )
 
     _apply_canonical_axes(ax, xlabel, ylabel, title)
