@@ -228,7 +228,7 @@ def _finite_complex(values: np.ndarray) -> np.ndarray:
 
 
 def _propagation_phase(freqs: np.ndarray, distance_m: float) -> np.ndarray:
-    """Expected WG/BEMPP propagation phase for exp(-i*w*t): exp(+i*k*r)."""
+    """Expected HornLab BEM propagation phase for exp(-i*w*t): exp(+i*k*r)."""
     return +2.0 * np.pi * np.asarray(freqs, dtype=float) * float(distance_m) / C_AIR
 
 
@@ -248,7 +248,7 @@ def _unwrapped_phase(
         return out
 
     phase_prop = _propagation_phase(freqs[valid], distance_m)
-    # BEMPP/WG fields propagate as exp(+i*k*r), so multiplying by
+    # HornLab BEM fields propagate as exp(+i*k*r), so multiplying by
     # exp(-i*k*r) leaves a slow residual phase for unwrap.
     residual = values[valid] * np.exp(-1j * phase_prop)
     residual_phase = np.unwrap(np.angle(residual))
@@ -289,7 +289,7 @@ def plot_group_delay(d: ComplexDirectivity, out: Path,
                      angles_deg: Tuple[float, ...] = (0.0, 30.0, 60.0)) -> Path:
     """Group delay vs frequency, in cycles. GD_cycles(f) = f * GD_seconds(f).
 
-    For the BEMPP exp(-i*w*t) convention, phase grows as +k*r for outgoing
+    For the HornLab BEM exp(-i*w*t) convention, phase grows as +k*r for outgoing
     waves, so GD_seconds(f) = +dphi/d(omega) = +dphi/(2*pi*df).
     GD_cycles(f) = f * GD_seconds(f).
     """
@@ -379,7 +379,7 @@ def plot_impulse_response(d: ComplexDirectivity, out: Path,
             mag_interp = np.interp(log_uniform, log_valid, mag_db)
             phase_interp = np.interp(log_uniform, log_valid, phase)
             spectrum_half = np.zeros(len(f_uniform), dtype=complex)
-            # BEMPP uses exp(-i*w*t); NumPy irfft assumes exp(+i*w*t),
+            # HornLab BEM uses exp(-i*w*t); NumPy irfft assumes exp(+i*w*t),
             # so conjugate (negate phase) to match.
             spectrum_half[in_band] = (
                 10.0 ** (mag_interp / 20.0)
@@ -482,7 +482,7 @@ def plot_acoustic_centre(d: ComplexDirectivity, out: Path,
     """Estimate acoustic centre offset (m) along the firing axis from the
     on-axis phase slope.
 
-    WG/BEMPP uses exp(-i*w*t) time convention, so outgoing propagation is
+    HornLab BEM uses exp(-i*w*t) time convention, so outgoing propagation is
     exp(+i*k*r). We remove that expected observation-distance phase before
     unwrap, re-add it for the slope fit, then report path_length - distance_m.
     Positive offset means the apparent source is farther than the measurement

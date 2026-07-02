@@ -5,8 +5,8 @@ Reusable visualization stack for acoustic simulation results.
 This package renders directivity heatmaps, polar line plots, frequency
 response, DI, and impedance from numpy arrays or lightweight payloads. It can
 be used standalone or as the render layer for a BEM pipeline such as
-`hornlab-mesher` (geometry → `.msh`) and `hornlab-bempp-bem` (`.msh` → result
-NPZs / dicts).
+`hornlab-waveguide-mesher` (geometry → `.msh`) and `hornlab-metal-bem`
+(`.msh` → result NPZs / dicts).
 
 ## Why this package exists
 
@@ -114,8 +114,8 @@ pip install -e ~/Code/HornLab/hornlab-plots
 ```
 
 During HornLab development this follows the same editable-install pattern as
-`hornlab-mesher` and `hornlab-bempp-bem`: install it into each consumer venv from
-the workspace checkout. The package is not currently published to PyPI.
+the canonical mesher and Metal solver: install it into each consumer venv
+from the workspace checkout. The package is not currently published to PyPI.
 
 ## Migration status
 
