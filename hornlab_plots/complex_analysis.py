@@ -42,43 +42,17 @@ from typing import Dict, List, Optional, Tuple
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.ticker import FuncFormatter
 import numpy as np
+
+try:
+    from .style import apply_theme_overrides
+except ImportError:  # pragma: no cover - direct ``python complex_analysis.py`` use.
+    from hornlab_plots.style import apply_theme_overrides
 
 _trapz = getattr(np, "trapezoid", None) or np.trapz
 
 C_AIR = 343.0
-
-# ---------------------------------------------------------------------------
-# Arctic Night theme — matches directivity_plot.py
-# ---------------------------------------------------------------------------
-
-FIGURE_BG = "#080D16"
-AXES_BG = "#0F1927"
-TEXT_COLOR = "#C8D8EC"
-TICK_COLOR = "#6A90B8"
-SPINE_COLOR = "#1E3050"
-GRID_COLOR = "white"
-GRID_ALPHA = 0.15
-GRID_ALPHA_MINOR = 0.07
-
-LINE_COLORS = ["#4FC3F7", "#E8A83A", "#EF5350", "#66BB6A", "#AB47BC", "#78909C"]
-FILL_ALPHA = 0.18
-DPI = 200
-
-_DIV_CMAP = LinearSegmentedColormap.from_list(
-    "arctic_diverging",
-    ["#1565C0", "#42A5F5", AXES_BG, "#E8A83A", "#E65100"],
-    N=256,
-)
-
-_CYCLIC_CMAP = LinearSegmentedColormap.from_list(
-    "arctic_cyclic",
-    ["#1565C0", "#42A5F5", "#80DEEA", "#C8D8EC",
-     "#E8A83A", "#EF6C00", "#B71C1C", "#6A1B9A", "#1565C0"],
-    N=256,
-)
 
 
 def _freq_fmt(x, pos):
@@ -87,46 +61,63 @@ def _freq_fmt(x, pos):
     return f"{int(x)}"
 
 
+def _theme():
+    return apply_theme_overrides()
+
+
+def _set_figure_bg(fig):
+    fig.patch.set_facecolor(_theme().figure_bg)
+
+
+def _line_color(index: int) -> str:
+    line_colors = _theme().line_colors
+    return line_colors[index % len(line_colors)]
+
+
 def _style_ax(ax, xlabel="", ylabel="", title="", grid=True):
-    ax.set_facecolor(AXES_BG)
+    theme_obj = _theme()
+    ax.set_facecolor(theme_obj.axes_bg)
     if xlabel:
-        ax.set_xlabel(xlabel, color=TEXT_COLOR, fontsize=10)
+        ax.set_xlabel(xlabel, color=theme_obj.text_color, fontsize=10)
     if ylabel:
-        ax.set_ylabel(ylabel, color=TEXT_COLOR, fontsize=10)
+        ax.set_ylabel(ylabel, color=theme_obj.text_color, fontsize=10)
     if title:
-        ax.set_title(title, color=TEXT_COLOR, fontsize=11, fontweight="600", pad=6)
-    ax.tick_params(colors=TICK_COLOR, labelsize=8, which="both")
+        ax.set_title(title, color=theme_obj.text_color, fontsize=11, fontweight="600", pad=6)
+    ax.tick_params(colors=theme_obj.tick_color, labelsize=8, which="both")
     for spine in ax.spines.values():
-        spine.set_color(SPINE_COLOR)
+        spine.set_color(theme_obj.spine_color)
     if grid:
-        ax.grid(True, which="major", color=GRID_COLOR, alpha=GRID_ALPHA, linewidth=0.5)
-        ax.grid(True, which="minor", color=GRID_COLOR, alpha=GRID_ALPHA_MINOR, linewidth=0.3)
+        ax.grid(True, which="major", color=theme_obj.grid_color, alpha=theme_obj.grid_alpha, linewidth=0.5)
+        ax.grid(True, which="minor", color=theme_obj.grid_color, alpha=theme_obj.grid_alpha_minor, linewidth=0.3)
 
 
 def _finish_fig(fig, out, suptitle=""):
+    theme_obj = _theme()
     if suptitle:
-        fig.suptitle(suptitle, color=TEXT_COLOR, fontsize=13, fontweight="bold")
+        fig.suptitle(suptitle, color=theme_obj.text_color, fontsize=13, fontweight="bold")
     fig.tight_layout()
-    fig.savefig(out, dpi=DPI, bbox_inches="tight",
+    fig.savefig(out, dpi=theme_obj.dpi, bbox_inches="tight",
                 facecolor=fig.get_facecolor(), edgecolor="none")
     plt.close(fig)
     return out
 
 
 def _add_cbar(fig, mappable, ax, label=""):
+    theme_obj = _theme()
     cbar = fig.colorbar(mappable, ax=ax, pad=0.02, shrink=0.9)
-    cbar.set_label(label, color=TEXT_COLOR, fontsize=9)
-    cbar.ax.tick_params(colors=TICK_COLOR, labelsize=8)
-    cbar.outline.set_edgecolor(SPINE_COLOR)
+    cbar.set_label(label, color=theme_obj.text_color, fontsize=9)
+    cbar.ax.tick_params(colors=theme_obj.tick_color, labelsize=8)
+    cbar.outline.set_edgecolor(theme_obj.spine_color)
     return cbar
 
 
 def _add_legend(ax, **kwargs):
+    theme_obj = _theme()
     return ax.legend(
         fontsize=8,
-        facecolor=AXES_BG,
-        edgecolor=SPINE_COLOR,
-        labelcolor=TEXT_COLOR,
+        facecolor=theme_obj.axes_bg,
+        edgecolor=theme_obj.spine_color,
+        labelcolor=theme_obj.text_color,
         framealpha=0.92,
         **kwargs,
     )
@@ -295,7 +286,7 @@ def plot_group_delay(d: ComplexDirectivity, out: Path,
     """
     fig, axes = plt.subplots(1, 2 if d.p_v is not None else 1,
                              figsize=(12, 5), sharey=True)
-    fig.patch.set_facecolor(FIGURE_BG)
+    _set_figure_bg(fig)
     if d.p_v is None:
         axes = [axes]
     for ax, p, name in zip(axes,
@@ -314,9 +305,9 @@ def plot_group_delay(d: ComplexDirectivity, out: Path,
             gd_s[valid] = np.gradient(phi[valid], omega[valid])
             gd_cycles = gd_s * d.freqs
             ax.plot(d.freqs[valid], gd_cycles[valid], lw=1.6,
-                    color=LINE_COLORS[i % len(LINE_COLORS)],
+                    color=_line_color(i),
                     label=f"{a:.0f}°")
-        ax.axhline(0, color=TICK_COLOR, lw=0.5, alpha=0.4)
+        ax.axhline(0, color=_theme().tick_color, lw=0.5, alpha=0.4)
         _log_axis(ax)
         if ax is axes[0]:
             _style_ax(ax, xlabel="Frequency", ylabel="Group delay (cycles)",
@@ -354,7 +345,7 @@ def plot_impulse_response(d: ComplexDirectivity, out: Path,
 
     fig, axes = plt.subplots(1, 2 if d.p_v is not None else 1,
                              figsize=(12, 5), sharey=True)
-    fig.patch.set_facecolor(FIGURE_BG)
+    _set_figure_bg(fig)
     if d.p_v is None:
         axes = [axes]
 
@@ -391,9 +382,9 @@ def plot_impulse_response(d: ComplexDirectivity, out: Path,
             t_ms = t * 1000.0
             mask = t_ms <= window_ms
             ax.plot(t_ms[mask], ir[mask], lw=1.2,
-                    color=LINE_COLORS[i % len(LINE_COLORS)],
+                    color=_line_color(i),
                     label=f"{a:.0f}°")
-        ax.axhline(0, color=TICK_COLOR, lw=0.5, alpha=0.4)
+        ax.axhline(0, color=_theme().tick_color, lw=0.5, alpha=0.4)
         if ax is axes[0]:
             _style_ax(ax, xlabel="Time (ms)", ylabel="Normalized amplitude",
                       title=f"{name} axis")
@@ -414,7 +405,7 @@ def plot_phase_sonogram(d: ComplexDirectivity, out: Path) -> Path:
     sources = [(d.p_h, "H")] + ([(d.p_v, "V")] if d.p_v is not None else [])
     fig, axes = plt.subplots(len(sources), 1, figsize=(12, 4.5 * len(sources)),
                              sharex=True)
-    fig.patch.set_facecolor(FIGURE_BG)
+    _set_figure_bg(fig)
     if len(sources) == 1:
         axes = [axes]
     onaxis_idx = int(np.argmin(np.abs(d.theta)))
@@ -423,11 +414,11 @@ def plot_phase_sonogram(d: ComplexDirectivity, out: Path) -> Path:
         phi_deg = np.rad2deg(phi_rel)
         vlim = 360.0
         im = ax.pcolormesh(d.freqs, d.theta, phi_deg.T,
-                           cmap=_CYCLIC_CMAP, vmin=-vlim, vmax=vlim, shading="auto")
+                           cmap=_theme().cyclic_cmap, vmin=-vlim, vmax=vlim, shading="auto")
         _log_axis(ax)
         _style_ax(ax, ylabel="Angle (°)", title=f"{name} axis", grid=False)
         _add_cbar(fig, im, ax, label="Phase rel. on-axis (°)")
-    axes[-1].set_xlabel("Frequency", color=TEXT_COLOR, fontsize=10)
+    axes[-1].set_xlabel("Frequency", color=_theme().text_color, fontsize=10)
     return _finish_fig(fig, out, suptitle=f"{d.label} — Phase Sonogram")
 
 
@@ -442,16 +433,17 @@ def plot_phase_polar(d: ComplexDirectivity, out: Path,
     fig, axes = plt.subplots(1, len(freqs_to_show),
                              figsize=(3.5 * len(freqs_to_show), 4.5),
                              subplot_kw={"projection": "polar"})
-    fig.patch.set_facecolor(FIGURE_BG)
+    _set_figure_bg(fig)
     if len(freqs_to_show) == 1:
         axes = [axes]
     onaxis_idx = int(np.argmin(np.abs(d.theta)))
     for ax, f_target in zip(axes, freqs_to_show):
-        ax.set_facecolor(AXES_BG)
+        theme_obj = _theme()
+        ax.set_facecolor(theme_obj.axes_bg)
         idx = int(np.argmin(np.abs(d.freqs - f_target)))
         for p, name, color in (
-            [(d.p_h, "H", LINE_COLORS[0])] +
-            ([(d.p_v, "V", LINE_COLORS[1])] if d.p_v is not None else [])
+            [(d.p_h, "H", _line_color(0))] +
+            ([(d.p_v, "V", _line_color(1))] if d.p_v is not None else [])
         ):
             phi = np.unwrap(np.angle(p[idx]) - np.angle(p[idx, onaxis_idx]))
             phi_deg = np.rad2deg(phi)
@@ -464,11 +456,11 @@ def plot_phase_polar(d: ComplexDirectivity, out: Path,
         freq_hz = d.freqs[idx]
         freq_label = f"{int(freq_hz / 1000)}k" if freq_hz >= 1000 and freq_hz % 1000 == 0 \
             else f"{freq_hz / 1000:.1f}k" if freq_hz >= 1000 else f"{freq_hz:.0f}"
-        ax.set_title(f"{freq_label} Hz", color=TEXT_COLOR, fontsize=11,
+        ax.set_title(f"{freq_label} Hz", color=theme_obj.text_color, fontsize=11,
                      fontweight="bold", pad=12)
-        ax.tick_params(colors=TICK_COLOR, labelsize=7)
-        ax.grid(True, color=GRID_COLOR, alpha=GRID_ALPHA, linewidth=0.5)
-        ax.spines["polar"].set_color(SPINE_COLOR)
+        ax.tick_params(colors=theme_obj.tick_color, labelsize=7)
+        ax.grid(True, color=theme_obj.grid_color, alpha=theme_obj.grid_alpha, linewidth=0.5)
+        ax.spines["polar"].set_color(theme_obj.spine_color)
         _add_legend(ax, loc="upper left", bbox_to_anchor=(-0.15, 1.08))
     return _finish_fig(fig, out, suptitle=f"{d.label} — Phase Polar")
 
@@ -490,7 +482,7 @@ def plot_acoustic_centre(d: ComplexDirectivity, out: Path,
     """
     sources = [(d.p_h, "H")] + ([(d.p_v, "V")] if d.p_v is not None else [])
     fig, ax = plt.subplots(figsize=(11, 5))
-    fig.patch.set_facecolor(FIGURE_BG)
+    _set_figure_bg(fig)
     log_f = np.log2(d.freqs)
     half = window_octaves / 2.0
     min_points = 5
@@ -519,9 +511,9 @@ def plot_acoustic_centre(d: ComplexDirectivity, out: Path,
         if np.all(np.isnan(offsets)):
             continue
         ax.plot(d.freqs, offsets * 1000.0, lw=1.6,
-                color=LINE_COLORS[si % len(LINE_COLORS)],
+                color=_line_color(si),
                 label=f"{name} on-axis")
-    ax.axhline(0, color=TICK_COLOR, lw=0.5, alpha=0.4)
+    ax.axhline(0, color=_theme().tick_color, lw=0.5, alpha=0.4)
     _log_axis(ax)
     _style_ax(ax, xlabel="Frequency",
               ylabel="Acoustic-centre offset (mm, +ve = farther)",
@@ -558,21 +550,21 @@ def _di_from_magnitude(p: np.ndarray, theta_deg: np.ndarray,
 
 def plot_di_coherent_vs_mag(d: ComplexDirectivity, out: Path) -> Path:
     fig, ax = plt.subplots(figsize=(11, 5))
-    fig.patch.set_facecolor(FIGURE_BG)
+    _set_figure_bg(fig)
     di_h = _di_from_magnitude(d.p_h, d.theta)
     valid_h = np.isfinite(di_h)
-    ax.plot(d.freqs[valid_h], di_h[valid_h], lw=2.0, color=LINE_COLORS[0],
+    ax.plot(d.freqs[valid_h], di_h[valid_h], lw=2.0, color=_line_color(0),
             label="H-plane DI proxy")
 
     if d.p_v is not None:
         di_v = _di_from_magnitude(d.p_v, d.theta)
         valid_v = np.isfinite(di_v)
-        ax.plot(d.freqs[valid_v], di_v[valid_v], lw=1.8, color=LINE_COLORS[1],
+        ax.plot(d.freqs[valid_v], di_v[valid_v], lw=1.8, color=_line_color(1),
                 ls="--", label="V-plane DI proxy")
         both = valid_h & valid_v
         if np.any(both):
             ax.fill_between(d.freqs[both], di_h[both], di_v[both],
-                            color=LINE_COLORS[0], alpha=FILL_ALPHA,
+                            color=_line_color(0), alpha=_theme().fill_alpha,
                             label="H/V mismatch")
 
     _log_axis(ax)
@@ -590,7 +582,7 @@ def plot_real_imag_heatmaps(d: ComplexDirectivity, out: Path) -> Path:
     sources = [(d.p_h, "H")] + ([(d.p_v, "V")] if d.p_v is not None else [])
     fig, axes = plt.subplots(len(sources), 2, figsize=(14, 4.5 * len(sources)),
                              sharex=True)
-    fig.patch.set_facecolor(FIGURE_BG)
+    _set_figure_bg(fig)
     if len(sources) == 1:
         axes = axes.reshape(1, 2)
     onaxis_idx = int(np.argmin(np.abs(d.theta)))
@@ -608,12 +600,12 @@ def plot_real_imag_heatmaps(d: ComplexDirectivity, out: Path) -> Path:
                 else 1.0
             )
             mesh = ax.pcolormesh(d.freqs, d.theta, data.T,
-                                 cmap=_DIV_CMAP, vmin=-v, vmax=v, shading="auto")
+                                 cmap=_theme().diverging_cmap, vmin=-v, vmax=v, shading="auto")
             _log_axis(ax)
             _style_ax(ax, ylabel="Angle (°)", title=label, grid=False)
             _add_cbar(fig, mesh, ax)
-    axes[-1, 0].set_xlabel("Frequency", color=TEXT_COLOR, fontsize=10)
-    axes[-1, 1].set_xlabel("Frequency", color=TEXT_COLOR, fontsize=10)
+    axes[-1, 0].set_xlabel("Frequency", color=_theme().text_color, fontsize=10)
+    axes[-1, 1].set_xlabel("Frequency", color=_theme().text_color, fontsize=10)
     return _finish_fig(fig, out, suptitle=f"{d.label} — Real / Imag Heatmaps")
 
 
@@ -625,7 +617,7 @@ def plot_hv_phase_tracking(d: ComplexDirectivity, out: Path) -> Path:
     if d.p_v is None:
         raise RuntimeError("H-vs-V phase tracking requires both axes")
     fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharex=True)
-    fig.patch.set_facecolor(FIGURE_BG)
+    _set_figure_bg(fig)
 
     diff_onaxis = (
         _onaxis_phase(d.p_h, d.freqs, d.distance_m, d.theta)
@@ -636,8 +628,8 @@ def plot_hv_phase_tracking(d: ComplexDirectivity, out: Path) -> Path:
     if np.any(valid_onaxis):
         diff_onaxis_deg[valid_onaxis] = np.rad2deg(np.unwrap(diff_onaxis[valid_onaxis]))
     axes[0].plot(d.freqs[valid_onaxis], diff_onaxis_deg[valid_onaxis],
-                 lw=2.0, color=LINE_COLORS[0])
-    axes[0].axhline(0, color=TICK_COLOR, lw=0.5, alpha=0.4)
+                 lw=2.0, color=_line_color(0))
+    axes[0].axhline(0, color=_theme().tick_color, lw=0.5, alpha=0.4)
     _log_axis(axes[0])
     _style_ax(axes[0], xlabel="Frequency",
               ylabel="φ_H − φ_V on-axis (°)",
@@ -649,7 +641,7 @@ def plot_hv_phase_tracking(d: ComplexDirectivity, out: Path) -> Path:
     diff = np.rad2deg(phi_h - phi_v)
     vlim = 90.0
     mesh = axes[1].pcolormesh(d.freqs, d.theta, diff.T,
-                              cmap=_DIV_CMAP, vmin=-vlim, vmax=vlim, shading="auto")
+                              cmap=_theme().diverging_cmap, vmin=-vlim, vmax=vlim, shading="auto")
     _log_axis(axes[1])
     _style_ax(axes[1], xlabel="Frequency",
               ylabel="Angle (°)",
@@ -800,15 +792,15 @@ def plot_pair_coherent_vs_power_sum(a: ComplexDirectivity,
     f_plot = f_common[valid]
 
     fig, ax = plt.subplots(figsize=(11, 5))
-    fig.patch.set_facecolor(FIGURE_BG)
-    ax.plot(f_plot, 20 * np.log10(coh + 1e-30), lw=2.0, color=LINE_COLORS[0],
+    _set_figure_bg(fig)
+    ax.plot(f_plot, 20 * np.log10(coh + 1e-30), lw=2.0, color=_line_color(0),
             label="Coherent |a + b|")
-    ax.plot(f_plot, 20 * np.log10(inc + 1e-30), lw=1.6, color=LINE_COLORS[1],
+    ax.plot(f_plot, 20 * np.log10(inc + 1e-30), lw=1.6, color=_line_color(1),
             ls="--", label="Power sum √(|a|² + |b|²)")
     ax.fill_between(f_plot,
                     20 * np.log10(coh + 1e-30),
                     20 * np.log10(inc + 1e-30),
-                    color=LINE_COLORS[0], alpha=FILL_ALPHA,
+                    color=_line_color(0), alpha=_theme().fill_alpha,
                     label="Interference delta")
     _log_axis(ax)
     _style_ax(ax, xlabel="Frequency", ylabel="On-axis SPL (dB, arbitrary)",
@@ -845,13 +837,13 @@ def plot_pair_phase_diff(a: ComplexDirectivity, b: ComplexDirectivity,
     diff_db = 20 * np.log10((real_sum + 1e-30) / (flat_sum + 1e-30))
 
     fig, ax = plt.subplots(figsize=(11, 5))
-    fig.patch.set_facecolor(FIGURE_BG)
+    _set_figure_bg(fig)
     finite = np.isfinite(diff_db)
     if not np.any(finite):
         raise RuntimeError("pair phase-diff plot has no valid overlapping samples")
     vlim = max(float(np.nanpercentile(np.abs(diff_db[finite]), 98.0)), 0.5)
     mesh = ax.pcolormesh(f_common, theta_common, diff_db.T,
-                         cmap=_DIV_CMAP, vmin=-vlim, vmax=vlim, shading="auto")
+                         cmap=_theme().diverging_cmap, vmin=-vlim, vmax=vlim, shading="auto")
     _log_axis(ax)
     _style_ax(ax, xlabel="Frequency", ylabel="Angle (°)",
               title="Real-phase minus flat-phase summation (dB)", grid=False)

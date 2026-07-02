@@ -263,6 +263,86 @@ def test_theme_constants_importable():
     assert HEATMAP_CMAP.name == "waveguide_arctic"
 
 
+def test_theme_api_pins_hornlab_defaults_and_restores_context():
+    from hornlab_plots import style
+
+    previous = style.get_theme()
+    style.set_theme("hornlab")
+    try:
+        theme = style.get_theme()
+        assert theme.name == "hornlab"
+        assert theme.figure_bg == "#080D16"
+        assert theme.axes_bg == "#0F1927"
+        assert theme.text_color == "#C8D8EC"
+        assert theme.tick_color == "#6A90B8"
+        assert theme.spine_color == "#1E3050"
+        assert theme.grid_color == "white"
+        assert theme.heatmap_cmap.name == "waveguide_arctic"
+        assert theme.diverging_cmap.name == "arctic_diverging"
+        assert theme.cyclic_cmap.name == "arctic_cyclic"
+        assert theme.line_colors == (
+            "#4FC3F7",
+            "#E8A83A",
+            "#EF5350",
+            "#66BB6A",
+            "#AB47BC",
+            "#78909C",
+        )
+        assert dict(theme.response_colors) == {
+            "lf": "#4FC3F7",
+            "mf": "#E8A83A",
+            "hf": "#EF5350",
+            "combined": "#EAF2FF",
+            "raw": "#78909C",
+            "other": "#AB47BC",
+        }
+
+        assert style.FIGURE_BG == theme.figure_bg
+        assert style.AXES_BG == theme.axes_bg
+        assert style.TEXT_COLOR == theme.text_color
+        assert style.TICK_COLOR == theme.tick_color
+        assert style.SPINE_COLOR == theme.spine_color
+        assert style.GRID_COLOR == theme.grid_color
+        assert style.HEATMAP_CMAP is theme.heatmap_cmap
+        assert style.LINE_COLORS == list(theme.line_colors)
+        assert style.RESPONSE_COLORS == dict(theme.response_colors)
+        assert style.DPI == theme.dpi
+
+        assert style.apply_theme_overrides(line_colors=[]).line_colors == theme.line_colors
+
+        dark = style.get_theme("dark")
+        assert dark.name == "dark"
+        assert dark is style.DARK_THEME
+        assert dark is not style.HORNLAB_THEME
+        assert dark.axes_bg == theme.axes_bg
+
+        with pytest.raises(RuntimeError):
+            with style.theme_context("dark"):
+                assert style.get_theme() is dark
+                raise RuntimeError("boom")
+        assert style.get_theme() is theme
+    finally:
+        style.set_theme(previous)
+
+
+def test_directivity_default_render_uses_hornlab_theme_values():
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+    from hornlab_plots._heatmap import _build_figure_from_planes, _build_planes_from_legacy
+    from hornlab_plots.style import AXES_BG, FIGURE_BG, TEXT_COLOR
+
+    freqs, directivity = _synthetic_legacy_dict(n_freq=5, n_angle=9)
+    planes = _build_planes_from_legacy(freqs, directivity)
+    fig = _build_figure_from_planes(planes)
+    try:
+        ax = fig.axes[0]
+        assert mcolors.to_hex(fig.get_facecolor(), keep_alpha=False).lower() == FIGURE_BG.lower()
+        assert mcolors.to_hex(ax.get_facecolor(), keep_alpha=False).lower() == AXES_BG.lower()
+        assert ax.xaxis.label.get_color() == TEXT_COLOR
+    finally:
+        plt.close(fig)
+
+
 def test_legacy_grid_helpers_match_wg():
     """`log_grid_lines` and `preferred_frequency_ticks` must produce the
     same values WG's `directivity_plot.py` did. Pin a few known cases."""

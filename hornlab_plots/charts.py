@@ -20,16 +20,8 @@ from matplotlib.ticker import FuncFormatter
 
 from ._grid import freq_formatter, log_grid_lines, preferred_frequency_ticks
 from .style import (
-    AXES_BG,
     DPI,
-    FIGURE_BG,
-    GRID_COLOR,
-    PRIMARY_GRID_ALPHA,
-    RESPONSE_COLORS,
-    SECONDARY_GRID_ALPHA,
-    SPINE_COLOR,
-    TEXT_COLOR,
-    TICK_COLOR,
+    apply_theme_overrides,
 )
 
 
@@ -88,37 +80,39 @@ def set_spl_window(
         ax.set_ylim(*window)
 
 
-def _apply_canonical_axes(ax, xlabel, ylabel, title):
-    ax.set_facecolor(AXES_BG)
-    ax.set_xlabel(xlabel, color=TEXT_COLOR, fontsize=11)
-    ax.set_ylabel(ylabel, color=TEXT_COLOR, fontsize=11)
-    ax.set_title(title, color=TEXT_COLOR, fontsize=13, fontweight="600", pad=8)
-    ax.tick_params(colors=TICK_COLOR, labelsize=9)
+def _apply_canonical_axes(ax, xlabel, ylabel, title, *, theme=None, colors=None):
+    theme_obj = apply_theme_overrides(theme, colors=colors)
+    ax.set_facecolor(theme_obj.axes_bg)
+    ax.set_xlabel(xlabel, color=theme_obj.text_color, fontsize=11)
+    ax.set_ylabel(ylabel, color=theme_obj.text_color, fontsize=11)
+    ax.set_title(title, color=theme_obj.text_color, fontsize=13, fontweight="600", pad=8)
+    ax.tick_params(colors=theme_obj.tick_color, labelsize=9)
     for spine in ax.spines.values():
-        spine.set_color(SPINE_COLOR)
-    ax.grid(True, alpha=SECONDARY_GRID_ALPHA, color=GRID_COLOR, linewidth=0.5)
+        spine.set_color(theme_obj.spine_color)
+    ax.grid(True, alpha=theme_obj.secondary_grid_alpha, color=theme_obj.grid_color, linewidth=0.5)
 
 
-def _setup_dark_axes(ax, xlabel, ylabel, title):
+def _setup_dark_axes(ax, xlabel, ylabel, title, *, theme=None, colors=None):
     """Apply dark theme styling to axes."""
-    _apply_canonical_axes(ax, xlabel, ylabel, title)
+    _apply_canonical_axes(ax, xlabel, ylabel, title, theme=theme, colors=colors)
 
 
-def _add_log_grid(ax, freq_min, freq_max, *, detailed=False):
+def _add_log_grid(ax, freq_min, freq_max, *, detailed=False, theme=None, colors=None):
     """Add log-frequency grid lines matching the directivity-heatmap style."""
+    theme_obj = apply_theme_overrides(theme, colors=colors)
     if detailed:
         ticks = preferred_frequency_ticks(freq_min, freq_max)
         if ticks:
             ax.set_xticks(ticks)
         for freq in ticks:
-            ax.axvline(freq, color=GRID_COLOR, alpha=PRIMARY_GRID_ALPHA, linewidth=0.7)
+            ax.axvline(freq, color=theme_obj.grid_color, alpha=theme_obj.primary_grid_alpha, linewidth=0.7)
         for freq in log_grid_lines(freq_min, freq_max):
             if not any(np.isclose(freq, tick, rtol=1e-6, atol=1e-6) for tick in ticks):
-                ax.axvline(freq, color=GRID_COLOR, alpha=SECONDARY_GRID_ALPHA, linewidth=0.5)
+                ax.axvline(freq, color=theme_obj.grid_color, alpha=theme_obj.secondary_grid_alpha, linewidth=0.5)
         return
 
     for freq in log_grid_lines(freq_min, freq_max):
-        ax.axvline(freq, color=GRID_COLOR, alpha=SECONDARY_GRID_ALPHA, linewidth=0.5)
+        ax.axvline(freq, color=theme_obj.grid_color, alpha=theme_obj.secondary_grid_alpha, linewidth=0.5)
 
 
 def _fig_to_base64(fig, dpi=150):
@@ -153,11 +147,18 @@ def _coerce_response_curve(curve) -> FrequencyResponseCurve:
     raise TypeError("frequency response curves must be FrequencyResponseCurve, dict, or tuple")
 
 
-def _response_curve_style(curve: FrequencyResponseCurve) -> dict[str, object]:
+def _response_curve_style(
+    curve: FrequencyResponseCurve,
+    *,
+    theme=None,
+    colors=None,
+    response_colors=None,
+) -> dict[str, object]:
+    theme_obj = apply_theme_overrides(theme, colors=colors, response_colors=response_colors)
     role = curve.role.lower()
     if role in {"sum", "total", "combined"}:
         return {
-            "color": RESPONSE_COLORS["combined"],
+            "color": theme_obj.response_colors["combined"],
             "linewidth": 2.8,
             "linestyle": "-",
             "alpha": 1.0,
@@ -166,7 +167,7 @@ def _response_curve_style(curve: FrequencyResponseCurve) -> dict[str, object]:
     linestyle = ":" if curve.crossover else "-"
     linewidth = 2.0 if curve.crossover else 1.65
     return {
-        "color": RESPONSE_COLORS.get(role, RESPONSE_COLORS["other"]),
+        "color": theme_obj.response_colors.get(role, theme_obj.response_colors["other"]),
         "linewidth": linewidth,
         "linestyle": linestyle,
         "alpha": 0.95 if curve.crossover else 0.78,
@@ -189,14 +190,24 @@ def _build_frequency_response_figure(
     top_margin_db: float = 3.0,
     floor_db: float | None = None,
     figsize: tuple[float, float] = (10.0, 4.8),
+    theme=None,
+    colors=None,
+    line_colors=None,
+    response_colors=None,
 ) -> object | None:
+    theme_obj = apply_theme_overrides(
+        theme,
+        colors=colors,
+        line_colors=line_colors,
+        response_colors=response_colors,
+    )
     response_curves = [_coerce_response_curve(curve) for curve in curves]
     if not response_curves:
         return None
 
     plotted = []
     fig, ax = plt.subplots(1, 1, figsize=figsize)
-    fig.patch.set_facecolor(FIGURE_BG)
+    fig.patch.set_facecolor(theme_obj.figure_bg)
 
     for curve in response_curves:
         freqs = np.asarray(curve.frequencies, dtype=float)
@@ -212,7 +223,12 @@ def _build_frequency_response_figure(
         freqs = freqs[finite]
         values = values[finite]
         plotted.append((freqs, values))
-        ax.semilogx(freqs, values, label=curve.label, **_response_curve_style(curve))
+        ax.semilogx(
+            freqs,
+            values,
+            label=curve.label,
+            **_response_curve_style(curve, theme=theme_obj),
+        )
 
     if not plotted:
         plt.close(fig)
@@ -222,7 +238,7 @@ def _build_frequency_response_figure(
         label = crossover_label or f"XO {float(crossover_hz):.0f} Hz"
         ax.axvline(
             float(crossover_hz),
-            color=TEXT_COLOR,
+            color=theme_obj.text_color,
             linestyle="--",
             linewidth=1.0,
             alpha=0.72,
@@ -243,9 +259,10 @@ def _build_frequency_response_figure(
             mesh_valid_radiating_hz=mesh_valid_radiating_hz,
             span_zorder=0,
             line_zorder=1,
+            theme=theme_obj,
         )
 
-    _apply_canonical_axes(ax, xlabel, ylabel, title)
+    _apply_canonical_axes(ax, xlabel, ylabel, title, theme=theme_obj)
     ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
     freq_min = min(float(np.min(freqs)) for freqs, _values in plotted)
     freq_max = max(float(np.max(freqs)) for freqs, _values in plotted)
@@ -257,13 +274,13 @@ def _build_frequency_response_figure(
         top_margin_db=top_margin_db,
         floor_db=floor_db,
     )
-    _add_log_grid(ax, ax.get_xlim()[0], ax.get_xlim()[1], detailed=True)
+    _add_log_grid(ax, ax.get_xlim()[0], ax.get_xlim()[1], detailed=True, theme=theme_obj)
     legend = ax.legend(
         loc="best",
         fontsize=9,
-        facecolor=AXES_BG,
-        edgecolor=SPINE_COLOR,
-        labelcolor=TEXT_COLOR,
+        facecolor=theme_obj.axes_bg,
+        edgecolor=theme_obj.spine_color,
+        labelcolor=theme_obj.text_color,
     )
     legend.get_frame().set_alpha(0.92)
     fig.tight_layout(pad=1.5)
@@ -297,16 +314,37 @@ def save_frequency_response_plot(output_path, curves, dpi=DPI, **kwargs):
     return out
 
 
-def frequency_response_b64(frequencies, spl, dpi=150):
+def frequency_response_b64(
+    frequencies,
+    spl,
+    dpi=150,
+    *,
+    theme=None,
+    colors=None,
+    line_colors=None,
+    response_colors=None,
+):
     """Render on-axis SPL vs frequency and return base64-encoded PNG."""
     return frequency_response_multi_b64(
         [FrequencyResponseCurve(frequencies, spl, "On-axis", role="combined")],
         title="Frequency Response (On-Axis)",
         dpi=dpi,
+        theme=theme,
+        colors=colors,
+        line_colors=line_colors,
+        response_colors=response_colors,
     )
 
 
-def directivity_index_b64(frequencies, di, dpi=150):
+def directivity_index_b64(
+    frequencies,
+    di,
+    dpi=150,
+    *,
+    theme=None,
+    colors=None,
+    line_colors=None,
+):
     """Render DI vs frequency, per-plane, and return base64-encoded PNG.
 
     Args:
@@ -319,11 +357,9 @@ def directivity_index_b64(frequencies, di, dpi=150):
     if len(freqs) == 0:
         return None
 
-    plane_colors = {
-        "horizontal": "#81c784",  # green
-        "vertical":   "#64b5f6",  # blue
-        "diagonal":   "#ffb74d",  # orange
-    }
+    theme_obj = apply_theme_overrides(theme, colors=colors, line_colors=line_colors)
+    plane_colors = theme_obj.plane_colors
+    line_palette = tuple(line_colors) if line_colors is not None else None
     plane_labels = {
         "horizontal": "H",
         "vertical":   "V",
@@ -350,11 +386,15 @@ def directivity_index_b64(frequencies, di, dpi=150):
         return None
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 4))
-    fig.patch.set_facecolor(FIGURE_BG)
+    fig.patch.set_facecolor(theme_obj.figure_bg)
 
     all_vals = []
-    for plane_id, di_vals in planes.items():
-        color = plane_colors.get(plane_id, "#81c784")
+    for index, (plane_id, di_vals) in enumerate(planes.items()):
+        color = (
+            line_palette[index % len(line_palette)]
+            if line_palette
+            else plane_colors.get(plane_id, "#81c784")
+        )
         label = plane_labels.get(plane_id, plane_id.capitalize())
         ax.semilogx(freqs, di_vals, color=color, linewidth=1.5, label=label)
         valid = di_vals[~np.isnan(di_vals)]
@@ -366,10 +406,10 @@ def directivity_index_b64(frequencies, di, dpi=150):
         return None
 
     if len(planes) > 1:
-        ax.legend(loc="upper left", fontsize=9, facecolor=AXES_BG,
-                  edgecolor=SPINE_COLOR, labelcolor=TEXT_COLOR)
+        ax.legend(loc="upper left", fontsize=9, facecolor=theme_obj.axes_bg,
+                  edgecolor=theme_obj.spine_color, labelcolor=theme_obj.text_color)
 
-    _setup_dark_axes(ax, "Frequency [Hz]", "DI [dB]", "Directivity Index")
+    _setup_dark_axes(ax, "Frequency [Hz]", "DI [dB]", "Directivity Index", theme=theme_obj)
     ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
     ax.set_xlim(freqs[0], freqs[-1])
@@ -377,24 +417,43 @@ def directivity_index_b64(frequencies, di, dpi=150):
     margin = max(2, (di_max - di_min) * 0.1)
     ax.set_ylim(min(0, di_min - margin), di_max + margin)
 
-    _add_log_grid(ax, freqs[0], freqs[-1], detailed=True)
+    _add_log_grid(ax, freqs[0], freqs[-1], detailed=True, theme=theme_obj)
     ax.tick_params(axis="x", labelsize=8)
 
     fig.tight_layout(pad=1.5)
     return _fig_to_base64(fig, dpi)
 
 
-def impedance_b64(frequencies, real, imaginary, dpi=150):
+def impedance_b64(
+    frequencies,
+    real,
+    imaginary,
+    dpi=150,
+    *,
+    theme=None,
+    colors=None,
+    line_colors=None,
+):
     """Render acoustic impedance (real + imaginary) and return base64 PNG."""
-    fig = _build_impedance_figure(frequencies, real, imaginary)
+    fig = _build_impedance_figure(frequencies, real, imaginary, theme=theme, colors=colors, line_colors=line_colors)
     if fig is None:
         return None
     return _fig_to_base64(fig, dpi)
 
 
-def save_impedance_plot(output_path, frequencies, real, imaginary, dpi=150):
+def save_impedance_plot(
+    output_path,
+    frequencies,
+    real,
+    imaginary,
+    dpi=150,
+    *,
+    theme=None,
+    colors=None,
+    line_colors=None,
+):
     """Save acoustic impedance chart to a PNG file on disk."""
-    fig = _build_impedance_figure(frequencies, real, imaginary)
+    fig = _build_impedance_figure(frequencies, real, imaginary, theme=theme, colors=colors, line_colors=line_colors)
     if fig is None:
         return None
     out = Path(output_path)
@@ -405,7 +464,9 @@ def save_impedance_plot(output_path, frequencies, real, imaginary, dpi=150):
     return out
 
 
-def _build_impedance_figure(frequencies, real, imaginary):
+def _build_impedance_figure(frequencies, real, imaginary, *, theme=None, colors=None, line_colors=None):
+    theme_obj = apply_theme_overrides(theme, colors=colors, line_colors=line_colors)
+    line_palette = tuple(line_colors) if line_colors is not None else None
     freqs = np.array(frequencies, dtype=float)
     re_vals = np.array(real, dtype=float)
     im_vals = np.array(imaginary, dtype=float)
@@ -414,13 +475,19 @@ def _build_impedance_figure(frequencies, real, imaginary):
         return None
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 4))
-    fig.patch.set_facecolor(FIGURE_BG)
+    fig.patch.set_facecolor(theme_obj.figure_bg)
 
-    ax.semilogx(freqs, re_vals, color="#64b5f6", linewidth=1.5, label="Re(Z)")
+    real_color = line_palette[0] if line_palette else theme_obj.impedance_colors["real"]
+    imag_color = (
+        line_palette[1 % len(line_palette)]
+        if line_palette
+        else theme_obj.impedance_colors["imaginary"]
+    )
+    ax.semilogx(freqs, re_vals, color=real_color, linewidth=1.5, label="Re(Z)")
     if len(im_vals) > 0:
-        ax.semilogx(freqs, im_vals, color="#ffb74d", linewidth=1.5, label="Im(Z)")
+        ax.semilogx(freqs, im_vals, color=imag_color, linewidth=1.5, label="Im(Z)")
 
-    _setup_dark_axes(ax, "Frequency [Hz]", "Z [Pa·s/m]", "Acoustic Impedance")
+    _setup_dark_axes(ax, "Frequency [Hz]", "Z [Pa·s/m]", "Acoustic Impedance", theme=theme_obj)
     ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
     ax.set_xlim(freqs[0], freqs[-1])
@@ -430,18 +497,26 @@ def _build_impedance_figure(frequencies, real, imaginary):
     margin = max(50, (z_max - z_min) * 0.1)
     ax.set_ylim(z_min - margin, z_max + margin)
 
-    _add_log_grid(ax, freqs[0], freqs[-1])
+    _add_log_grid(ax, freqs[0], freqs[-1], theme=theme_obj)
 
     legend = ax.legend(loc="upper right", fontsize=10,
-                       facecolor=AXES_BG, edgecolor=SPINE_COLOR,
-                       labelcolor=TEXT_COLOR)
+                       facecolor=theme_obj.axes_bg, edgecolor=theme_obj.spine_color,
+                       labelcolor=theme_obj.text_color)
     legend.get_frame().set_alpha(0.9)
 
     fig.tight_layout(pad=1.5)
     return fig
 
 
-def render_all_charts_b64(payload, dpi=150):
+def render_all_charts_b64(
+    payload,
+    dpi=150,
+    *,
+    theme=None,
+    colors=None,
+    line_colors=None,
+    response_colors=None,
+):
     """Render all charts from a combined results payload.
 
     Returns a dict with keys ``frequency_response``, ``directivity_index``,
@@ -459,15 +534,38 @@ def render_all_charts_b64(payload, dpi=150):
 
     charts = {}
 
-    charts["frequency_response"] = frequency_response_b64(freqs, spl, dpi) if spl else None
+    charts["frequency_response"] = frequency_response_b64(
+        freqs,
+        spl,
+        dpi,
+        theme=theme,
+        colors=colors,
+        line_colors=line_colors,
+        response_colors=response_colors,
+    ) if spl else None
     di_input = payload.get("di", [])
-    charts["directivity_index"] = directivity_index_b64(di_freqs, di_input, dpi) if di_input else None
-    charts["impedance"] = impedance_b64(imp_freqs, imp_real, imp_imag, dpi) if imp_real else None
+    charts["directivity_index"] = directivity_index_b64(
+        di_freqs,
+        di_input,
+        dpi,
+        theme=theme,
+        colors=colors,
+        line_colors=line_colors,
+    ) if di_input else None
+    charts["impedance"] = impedance_b64(
+        imp_freqs,
+        imp_real,
+        imp_imag,
+        dpi,
+        theme=theme,
+        colors=colors,
+        line_colors=line_colors,
+    ) if imp_real else None
 
     dir_b64 = None
     if directivity and freqs:
         try:
-            dir_b64 = directivity_heatmap_from_legacy_dict(freqs, directivity, dpi)
+            dir_b64 = directivity_heatmap_from_legacy_dict(freqs, directivity, dpi, theme=theme, colors=colors)
         except Exception:
             pass
     charts["directivity_map"] = dir_b64

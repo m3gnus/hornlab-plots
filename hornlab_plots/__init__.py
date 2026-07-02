@@ -33,9 +33,9 @@ Lower-level primitives:
 - ``build_grid_from_legacy(freqs, patterns)``
 - ``check_symmetry(h_values, v_values)``
 
-Theme constants live in ``hornlab_plots.style``. Opinionated presets
-(Optimizer-Dashboard jet isobar, impedance, beamwidth) live in
-``hornlab_plots.templates``.
+Theme API and backwards-compatible constants live in
+``hornlab_plots.style``. Opinionated presets (Optimizer-Dashboard jet isobar,
+impedance, beamwidth) live in ``hornlab_plots.templates``.
 """
 
 from ._grid import (
@@ -70,6 +70,16 @@ from ._polar import (
     prepare_polar_line_data,
     save_polar_line_plot,
 )
+from .style import (
+    BUILTIN_THEMES,
+    DARK_THEME,
+    HORNLAB_THEME,
+    Theme,
+    get_theme,
+    set_theme,
+    theme,
+    theme_context,
+)
 
 __version__ = "0.1.0"
 
@@ -96,6 +106,15 @@ __all__ = [
     "FrequencyResponseCurve",
     "set_spl_window",
     "spl_window",
+    # Themes
+    "Theme",
+    "HORNLAB_THEME",
+    "DARK_THEME",
+    "BUILTIN_THEMES",
+    "get_theme",
+    "set_theme",
+    "theme",
+    "theme_context",
     # Tick / grid helpers
     "log_grid_lines",
     "preferred_frequency_ticks",

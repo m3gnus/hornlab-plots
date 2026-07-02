@@ -33,22 +33,11 @@ from ._grid import (
 )
 from .style import (
     ANGLE_SAMPLES,
-    AXES_BG,
-    CONTOUR_OUTLINE,
-    FIGURE_BG,
     FRACTIONAL_OCTAVE,
     FREQ_SAMPLES,
-    GRID_COLOR,
-    HEATMAP_CMAP,
     MAX_DB,
-    MESH_LIMIT_COLOR,
     MIN_DB,
-    PRIMARY_GRID_ALPHA,
-    REFERENCE_CONTOUR_COLOR,
-    SECONDARY_GRID_ALPHA,
-    SPINE_COLOR,
-    TEXT_COLOR,
-    TICK_COLOR,
+    apply_theme_overrides,
 )
 
 
@@ -243,6 +232,8 @@ def _draw_mesh_valid_markers(
     mesh_valid_radiating_hz=None,
     span_zorder=0,
     line_zorder=3,
+    theme=None,
+    colors=None,
 ):
     """Draw the mesh-valid (solid) and aperture-valid (dashed) frequency lines.
 
@@ -252,25 +243,26 @@ def _draw_mesh_valid_markers(
     aperture (not the coarser near/far walls) is resolved, and is shaded.
     Returns the legend handles drawn (empty when nothing falls in range).
     """
+    theme_obj = apply_theme_overrides(theme, colors=colors)
     eff = float(mesh_valid_hz) if mesh_valid_hz and float(mesh_valid_hz) > 0 else None
     ap = float(mesh_valid_radiating_hz) if mesh_valid_radiating_hz and float(mesh_valid_radiating_hz) > 0 else None
     handles = []
     if eff is not None and ap is not None and eff != ap:
         left, right = min(eff, ap), max(eff, ap)
-        ax.axvspan(max(lo, left), min(hi, right), color=MESH_LIMIT_COLOR, alpha=0.10, zorder=span_zorder)
+        ax.axvspan(max(lo, left), min(hi, right), color=theme_obj.mesh_limit_color, alpha=0.10, zorder=span_zorder)
     elif eff is not None and lo < eff < hi:
-        ax.axvspan(eff, hi, color=MESH_LIMIT_COLOR, alpha=0.12, zorder=span_zorder)
+        ax.axvspan(eff, hi, color=theme_obj.mesh_limit_color, alpha=0.12, zorder=span_zorder)
     if eff is not None and lo < eff < hi:
         handles.append(
             ax.axvline(
-                eff, color=MESH_LIMIT_COLOR, linestyle="-", linewidth=2.0,
+                eff, color=theme_obj.mesh_limit_color, linestyle="-", linewidth=2.0,
                 label=f"mesh-valid {eff:.0f} Hz", zorder=line_zorder,
             )
         )
     if ap is not None and lo < ap < hi:
         handles.append(
             ax.axvline(
-                ap, color=MESH_LIMIT_COLOR, linestyle="--", linewidth=2.0,
+                ap, color=theme_obj.mesh_limit_color, linestyle="--", linewidth=2.0,
                 label=f"aperture-valid {ap:.0f} Hz", zorder=line_zorder,
             )
         )
@@ -280,6 +272,9 @@ def _draw_mesh_valid_markers(
 def render_single_heatmap(
     ax, freqs, angles, values, title, reference_level=-6.0,
     mesh_valid_hz=None, mesh_valid_radiating_hz=None,
+    *,
+    theme=None,
+    colors=None,
 ):
     """Render a single directivity heatmap onto the given matplotlib Axes.
 
@@ -292,7 +287,8 @@ def render_single_heatmap(
     ``mesh_valid_radiating_hz`` (dashed) the radiating-aperture frequency;
     results to the right of each are increasingly under-resolved.
     """
-    ax.set_facecolor(AXES_BG)
+    theme_obj = apply_theme_overrides(theme, colors=colors)
+    ax.set_facecolor(theme_obj.axes_bg)
 
     log_freqs = np.log10(freqs)
     if len(log_freqs) > 1:
@@ -319,7 +315,7 @@ def render_single_heatmap(
         freq_edges,
         angle_edges,
         values,
-        cmap=HEATMAP_CMAP,
+        cmap=theme_obj.heatmap_cmap,
         vmin=MIN_DB,
         vmax=MAX_DB,
         shading="flat",
@@ -333,13 +329,13 @@ def render_single_heatmap(
             Y,
             values,
             levels=contour_levels,
-            colors=GRID_COLOR,
+            colors=theme_obj.grid_color,
             linewidths=0.6,
             alpha=0.45,
         )
         for collection in contour.collections:
             collection.set_path_effects([
-                pe.Stroke(linewidth=1.2, foreground=CONTOUR_OUTLINE, alpha=0.8),
+                pe.Stroke(linewidth=1.2, foreground=theme_obj.contour_outline, alpha=0.8),
                 pe.Normal(),
             ])
     except Exception:
@@ -351,12 +347,12 @@ def render_single_heatmap(
             Y,
             values,
             levels=[reference_level],
-            colors=REFERENCE_CONTOUR_COLOR,
+            colors=theme_obj.reference_contour_color,
             linewidths=1.5,
         )
         for collection in ref_contour.collections:
             collection.set_path_effects([
-                pe.Stroke(linewidth=2.6, foreground=CONTOUR_OUTLINE, alpha=0.85),
+                pe.Stroke(linewidth=2.6, foreground=theme_obj.contour_outline, alpha=0.85),
                 pe.Normal(),
             ])
     except Exception:
@@ -374,11 +370,11 @@ def render_single_heatmap(
         ax.set_xticks(detailed_ticks)
 
     for freq in detailed_ticks:
-        ax.axvline(freq, color=GRID_COLOR, alpha=PRIMARY_GRID_ALPHA, linewidth=0.7)
+        ax.axvline(freq, color=theme_obj.grid_color, alpha=theme_obj.primary_grid_alpha, linewidth=0.7)
 
     for freq in log_grid_lines(freqs[0], freqs[-1]):
         if not contains_frequency(detailed_ticks, freq):
-            ax.axvline(freq, color=GRID_COLOR, alpha=SECONDARY_GRID_ALPHA, linewidth=0.5)
+            ax.axvline(freq, color=theme_obj.grid_color, alpha=theme_obj.secondary_grid_alpha, linewidth=0.5)
 
     angle_range = angles[-1] - angles[0]
     if angle_range > 120:
@@ -390,7 +386,7 @@ def render_single_heatmap(
     start = np.ceil(angles[0] / angle_step) * angle_step
     for a in np.arange(start, angles[-1] + angle_step * 0.5, angle_step):
         if angles[0] < a < angles[-1]:
-            ax.axhline(a, color=GRID_COLOR, alpha=SECONDARY_GRID_ALPHA, linewidth=0.5)
+            ax.axhline(a, color=theme_obj.grid_color, alpha=theme_obj.secondary_grid_alpha, linewidth=0.5)
 
     mesh_valid_handles = _draw_mesh_valid_markers(
         ax,
@@ -400,21 +396,22 @@ def render_single_heatmap(
         mesh_valid_radiating_hz=mesh_valid_radiating_hz,
         span_zorder=2,
         line_zorder=3,
+        theme=theme_obj,
     )
 
     ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
-    ax.set_xlabel("Frequency [Hz]", color=TEXT_COLOR, fontsize=11)
-    ax.set_ylabel("Angle [deg]", color=TEXT_COLOR, fontsize=11)
-    ax.set_title(title, color=TEXT_COLOR, fontsize=13, fontweight="600", pad=8)
-    ax.tick_params(colors=TICK_COLOR, labelsize=8)
+    ax.set_xlabel("Frequency [Hz]", color=theme_obj.text_color, fontsize=11)
+    ax.set_ylabel("Angle [deg]", color=theme_obj.text_color, fontsize=11)
+    ax.set_title(title, color=theme_obj.text_color, fontsize=13, fontweight="600", pad=8)
+    ax.tick_params(colors=theme_obj.tick_color, labelsize=8)
 
     for spine in ax.spines.values():
-        spine.set_color(SPINE_COLOR)
+        spine.set_color(theme_obj.spine_color)
 
     cbar = plt.colorbar(mesh, ax=ax, shrink=0.85, pad=0.02)
-    cbar.set_label("dB", color=TEXT_COLOR, fontsize=10)
-    cbar.ax.tick_params(colors=TICK_COLOR, labelsize=9)
-    cbar.outline.set_edgecolor(SPINE_COLOR)
+    cbar.set_label("dB", color=theme_obj.text_color, fontsize=10)
+    cbar.ax.tick_params(colors=theme_obj.tick_color, labelsize=9)
+    cbar.outline.set_edgecolor(theme_obj.spine_color)
 
     legend_handles = []
     if ref_contour is not None:
@@ -424,7 +421,7 @@ def render_single_heatmap(
             Line2D(
                 [0],
                 [0],
-                color=REFERENCE_CONTOUR_COLOR,
+                color=theme_obj.reference_contour_color,
                 linewidth=1.5,
                 label=f"ref @ {reference_level:g} dB",
             )
@@ -435,9 +432,9 @@ def render_single_heatmap(
             handles=legend_handles,
             loc="upper right",
             fontsize=8,
-            facecolor=AXES_BG,
-            edgecolor=SPINE_COLOR,
-            labelcolor=TEXT_COLOR,
+            facecolor=theme_obj.axes_bg,
+            edgecolor=theme_obj.spine_color,
+            labelcolor=theme_obj.text_color,
             framealpha=0.85,
         )
 
@@ -483,7 +480,8 @@ def _build_planes_from_legacy(frequencies, directivity):
 
 
 def _build_figure_from_planes(
-    planes, reference_level=-6.0, mesh_valid_hz=None, mesh_valid_radiating_hz=None
+    planes, reference_level=-6.0, mesh_valid_hz=None, mesh_valid_radiating_hz=None,
+    *, theme=None, colors=None
 ):
     """Render planes into a matplotlib figure and return it.
 
@@ -491,6 +489,7 @@ def _build_figure_from_planes(
     ``mesh_valid_hz``/``mesh_valid_radiating_hz`` overlay the mesh-valid and
     aperture-valid frequency markers on each panel.
     """
+    theme_obj = apply_theme_overrides(theme, colors=colors)
     by_key = {entry["key"]: entry for entry in planes}
     has_only_hv = set(by_key.keys()) == {"horizontal", "vertical"}
     symmetric = has_only_hv and check_symmetry(
@@ -518,7 +517,7 @@ def _build_figure_from_planes(
         titles = [_plane_title(entry["key"]) for entry in planes]
         datasets = [(entry["freqs"], entry["angles"], entry["values"]) for entry in planes]
 
-    fig.patch.set_facecolor(FIGURE_BG)
+    fig.patch.set_facecolor(theme_obj.figure_bg)
     for ax, title, (plot_freqs, plot_angles, plot_values) in zip(axes, titles, datasets):
         render_single_heatmap(
             ax,
@@ -529,6 +528,7 @@ def _build_figure_from_planes(
             reference_level=reference_level,
             mesh_valid_hz=mesh_valid_hz,
             mesh_valid_radiating_hz=mesh_valid_radiating_hz,
+            theme=theme_obj,
         )
 
     fig.tight_layout(pad=1.5)
@@ -540,6 +540,9 @@ def directivity_heatmap_from_legacy_dict(
     directivity,
     dpi=150,
     reference_level=-6.0,
+    *,
+    theme=None,
+    colors=None,
 ):
     """Render directivity heatmap(s) and return base64-encoded PNG (no prefix).
 
@@ -559,7 +562,8 @@ def directivity_heatmap_from_legacy_dict(
     if not planes:
         return None
 
-    fig = _build_figure_from_planes(planes, reference_level=reference_level)
+    theme_obj = apply_theme_overrides(theme, colors=colors)
+    fig = _build_figure_from_planes(planes, reference_level=reference_level, theme=theme_obj)
 
     buf = io.BytesIO()
     fig.savefig(
@@ -583,6 +587,9 @@ def save_directivity_plot(
     reference_level=-6.0,
     mesh_valid_hz=None,
     mesh_valid_radiating_hz=None,
+    *,
+    theme=None,
+    colors=None,
 ):
     """Render directivity heatmap(s) and save to ``output_path`` (PNG).
 
@@ -594,11 +601,13 @@ def save_directivity_plot(
     if not planes:
         return None
 
+    theme_obj = apply_theme_overrides(theme, colors=colors)
     fig = _build_figure_from_planes(
         planes,
         reference_level=reference_level,
         mesh_valid_hz=mesh_valid_hz,
         mesh_valid_radiating_hz=mesh_valid_radiating_hz,
+        theme=theme_obj,
     )
 
     out = Path(output_path)
@@ -627,6 +636,8 @@ def directivity_heatmap_b64(
     title=None,
     reference_level=-6.0,
     dpi=150,
+    theme=None,
+    colors=None,
 ):
     """Render a single directivity heatmap and return base64 PNG (no prefix).
 
@@ -647,10 +658,11 @@ def directivity_heatmap_b64(
     if freqs.size == 0 or angles.size == 0:
         return None
 
+    theme_obj = apply_theme_overrides(theme, colors=colors)
     angles_p, freqs_p, values_p = prepare_heatmap_data(angles, freqs, values_raw)
 
     fig, ax = plt.subplots(1, 1, figsize=(11, 5))
-    fig.patch.set_facecolor(FIGURE_BG)
+    fig.patch.set_facecolor(theme_obj.figure_bg)
     render_single_heatmap(
         ax,
         freqs_p,
@@ -658,6 +670,7 @@ def directivity_heatmap_b64(
         values_p,
         title or "Normalized Directivity",
         reference_level=reference_level,
+        theme=theme_obj,
     )
     fig.tight_layout(pad=1.5)
 
