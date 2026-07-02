@@ -110,12 +110,16 @@ from hornlab_plots.style import (
 ## Installation
 
 ```bash
-pip install -e ~/Code/HornLab/hornlab-plots
+pip install "hornlab-plots @ git+https://github.com/m3gnus/hornlab-plots.git"
+
+# Local development checkout:
+git clone https://github.com/m3gnus/hornlab-plots.git
+cd hornlab-plots
+pip install -e ".[dev]"
 ```
 
-During HornLab development this follows the same editable-install pattern as
-the canonical mesher and Metal solver: install it into each consumer venv
-from the workspace checkout. The package is not currently published to PyPI.
+The package is not currently published to PyPI. During local HornLab
+development, install it into each consumer venv from the workspace checkout.
 
 ## Migration status
 
@@ -123,3 +127,7 @@ Within HornLab, this package is the canonical plot renderer. The legacy WG
 modules at `Waveguide-Generator/server/solver/directivity_plot.py` and
 `server/solver/charts.py` were removed on 2026-05-23 after byte-identical
 gate evidence.
+
+## License
+
+AGPL-3.0-or-later

@@ -7,6 +7,10 @@ name = "hornlab-plots"
 version = "0.1.0"
 description = "Canonical visualization stack for HornLab (directivity heatmaps, polar plots, frequency response, impedance)"
 requires-python = ">=3.10"
+license = { text = "AGPL-3.0-or-later" }
+classifiers = [
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+]
 dependencies = [
     "numpy",
     "matplotlib",

@@ -1,17 +1,11 @@
-"""Canonical plot renderer smoke tests after WG legacy deletion."""
+"""Canonical plot renderer smoke tests."""
 
 from __future__ import annotations
 
 import base64
-from pathlib import Path
-
 import numpy as np
 
 import hornlab_plots as hlp
-
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_WG_SOLVER = _REPO_ROOT / "Waveguide-Generator" / "server" / "solver"
 
 
 def _decode_png(b64: str) -> bytes:
@@ -21,10 +15,10 @@ def _decode_png(b64: str) -> bytes:
     return data
 
 
-def test_wg_legacy_plot_modules_are_deleted():
-    if _WG_SOLVER.exists():
-        assert not (_WG_SOLVER / "directivity_plot.py").exists()
-        assert not (_WG_SOLVER / "charts.py").exists()
+def test_canonical_renderer_exports_are_available():
+    assert callable(hlp.directivity_heatmap_from_legacy_dict)
+    assert callable(hlp.frequency_response_b64)
+    assert callable(hlp.save_directivity_plot)
 
 
 def test_directivity_heatmap_from_legacy_dict_returns_png():
