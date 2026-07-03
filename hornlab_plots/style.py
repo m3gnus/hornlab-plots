@@ -5,6 +5,22 @@ module-level constants exactly. ``dark`` is a distinct built-in Theme modeled
 on the Waveguide Generator dark axes with the Arctic palette; it intentionally
 shares the current values until WG needs a separate dark variant.
 
+Eight designed themes register alongside them (previews in
+``docs/themes/README.md``): ``granite``, ``abyss``, ``blueprint``, and
+``journal`` from the Fable spec set, plus ``contrast``, ``sepia``,
+``phosphor``, and ``ember`` from the Opus spec set. Their spec'd grid
+linestyle/weight ride in ``Theme.rc_params`` (``grid.linestyle`` /
+``grid.linewidth``) because the schema has no dedicated grid-style fields;
+apply them with ``Theme.matplotlib_rc_params()`` under
+``matplotlib.rc_context``.
+
+TODO(journal): the ``journal`` spec additionally calls for per-curve
+linestyle cycling (solid/dashed/dotted alongside its grayscale-ordered
+palette, so a mono print of a 3-curve chart stays readable) and a per-call
+screen fallback from ``gray_r`` to viridis. The current Theme schema
+supports neither a per-curve linestyle cycle nor per-call colormap
+overrides, so both are recorded here instead of extending the schema.
+
 The legacy constants remain importable for existing callers. New renderers
 should resolve a :class:`Theme` with ``get_theme`` / ``apply_theme_overrides``
 instead of importing constants directly.
@@ -17,6 +33,7 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, Iterator, Mapping
 
+import matplotlib
 from matplotlib.colors import Colormap, LinearSegmentedColormap
 
 
@@ -211,10 +228,242 @@ def _make_theme(name: str) -> Theme:
 
 HORNLAB_THEME = _make_theme("hornlab")
 DARK_THEME = _make_theme("dark")
+
+
+# Designed themes ----------------------------------------------------------
+#
+# Built from the Fable/Opus spec sets (scratchpad themes-fable.md /
+# themes-opus.md). Spec fields map directly onto the schema; everything the
+# specs leave open derives by one uniform rule so no per-theme colors are
+# invented:
+#
+# - "foreground/ink" covers text, ticks, and spines.
+# - the contour outline halo uses the page background (it separates contour
+#   labels from the heatmap on any ground).
+# - the spec accent drives the reference contour (the highlighted isobar).
+# - response/plane/impedance roles follow the spec cycle order, so each
+#   spec's CVD-safe lead pair carries the lf/mf (and H/V, real/imag) split;
+#   ``combined`` uses the ink and ``raw``/``other`` reuse cycle tails.
+# - the mesh-limit warning stays the shared legacy red across themes.
+# - spec grid colors are exact (already blended for their background), so
+#   the primary grid alpha is 1.0 and minor grids echo at half strength.
+# - specs pin only the heatmap colormap; diverging/cyclic use CVD-safe
+#   stock defaults.
+
+_STOCK_DIVERGING_CMAP = "RdBu_r"
+_STOCK_CYCLIC_CMAP = "twilight"
+
+
+def _spec_theme(
+    name: str,
+    *,
+    figure_bg: str,
+    axes_bg: str,
+    ink: str,
+    grid_color: str,
+    grid_linestyle: str,
+    grid_linewidth: float,
+    cycle: tuple[str, ...],
+    heatmap: str,
+    accent: str,
+    dpi: int,
+) -> Theme:
+    """Build a Theme from designed-spec fields (see comment block above)."""
+    role_colors = {
+        "figure_bg": figure_bg,
+        "background": figure_bg,
+        "axes_bg": axes_bg,
+        "axes": axes_bg,
+        "text": ink,
+        "tick": ink,
+        "spine": ink,
+        "grid": grid_color,
+        "contour_outline": figure_bg,
+        "reference_contour": accent,
+        "mesh_limit": _MESH_LIMIT_COLOR,
+        "accent": accent,
+    }
+    response_colors = {
+        "lf": cycle[0],
+        "mf": cycle[1],
+        "hf": cycle[2],
+        "combined": ink,
+        "raw": cycle[5],
+        "other": cycle[4],
+    }
+    plane_colors = {
+        "horizontal": cycle[0],
+        "vertical": cycle[1],
+        "diagonal": cycle[2],
+    }
+    impedance_colors = {
+        "real": cycle[0],
+        "imaginary": cycle[1],
+    }
+    return Theme(
+        name=name,
+        figure_bg=figure_bg,
+        axes_bg=axes_bg,
+        text_color=ink,
+        tick_color=ink,
+        spine_color=ink,
+        grid_color=grid_color,
+        contour_outline=figure_bg,
+        reference_contour_color=accent,
+        mesh_limit_color=_MESH_LIMIT_COLOR,
+        primary_grid_alpha=1.0,
+        secondary_grid_alpha=0.5,
+        grid_alpha=1.0,
+        grid_alpha_minor=0.5,
+        fill_alpha=_FILL_ALPHA,
+        dpi=dpi,
+        palette=cycle,
+        role_colors=_freeze_mapping(role_colors),
+        line_colors=cycle,
+        response_colors=_freeze_mapping(response_colors),
+        plane_colors=_freeze_mapping(plane_colors),
+        impedance_colors=_freeze_mapping(impedance_colors),
+        heatmap_cmap=matplotlib.colormaps[heatmap],
+        diverging_cmap=matplotlib.colormaps[_STOCK_DIVERGING_CMAP],
+        cyclic_cmap=matplotlib.colormaps[_STOCK_CYCLIC_CMAP],
+        rc_params=MappingProxyType(
+            {
+                "grid.linestyle": grid_linestyle,
+                "grid.linewidth": grid_linewidth,
+            }
+        ),
+    )
+
+
+# Fable spec set -----------------------------------------------------------
+
+GRANITE_THEME = _spec_theme(
+    "granite",
+    figure_bg="#FAFAF7",
+    axes_bg="#FFFFFF",
+    ink="#1A1D21",
+    grid_color="#D8D8D3",
+    grid_linestyle="--",
+    grid_linewidth=0.6,
+    cycle=("#00696D", "#C4501E", "#3B4CC0", "#5B8C2A", "#7B2D8B", "#556270"),
+    heatmap="viridis",
+    accent="#C4501E",
+    dpi=160,
+)
+
+ABYSS_THEME = _spec_theme(
+    "abyss",
+    figure_bg="#0E1116",
+    axes_bg="#161B22",
+    ink="#E6EDF3",
+    grid_color="#2D333B",
+    grid_linestyle="-",
+    grid_linewidth=0.5,
+    cycle=("#33C3DC", "#FFB454", "#3FB950", "#DB61A2", "#7B9DFF", "#D2A86A"),
+    heatmap="magma",
+    accent="#33C3DC",
+    dpi=160,
+)
+
+BLUEPRINT_THEME = _spec_theme(
+    "blueprint",
+    figure_bg="#10243E",
+    axes_bg="#16304F",
+    ink="#DCE9F5",
+    grid_color="#2E4A6B",
+    grid_linestyle="-",
+    grid_linewidth=0.4,
+    cycle=("#F2F7FC", "#7FD4FF", "#FFD966", "#FF8A7A", "#8AE0C3", "#C3B5FF"),
+    heatmap="cividis",
+    accent="#FFD966",
+    dpi=160,
+)
+
+JOURNAL_THEME = _spec_theme(
+    "journal",
+    figure_bg="#FFFFFF",
+    axes_bg="#FFFFFF",
+    ink="#111111",
+    grid_color="#CCCCCC",
+    grid_linestyle=":",
+    grid_linewidth=0.5,
+    cycle=("#000000", "#666666", "#AAAAAA", "#B03A2E", "#1F618D", "#117A65"),
+    heatmap="gray_r",
+    accent="#B03A2E",
+    dpi=300,
+)
+
+# Opus spec set ------------------------------------------------------------
+
+CONTRAST_THEME = _spec_theme(
+    "contrast",
+    figure_bg="#FFFFFF",
+    axes_bg="#FFFFFF",
+    ink="#000000",
+    grid_color="#4D4D4D",
+    grid_linestyle="-",
+    grid_linewidth=0.9,
+    cycle=("#005AB5", "#DC3220", "#000000", "#785EF0", "#FFB000", "#1AA179"),
+    heatmap="cividis",
+    accent="#DC3220",
+    dpi=150,
+)
+
+SEPIA_THEME = _spec_theme(
+    "sepia",
+    figure_bg="#FDF6E3",
+    axes_bg="#FBF1DA",
+    ink="#586E75",
+    grid_color="#93A1A1",
+    grid_linestyle=":",
+    grid_linewidth=0.7,
+    cycle=("#268BD2", "#CB4B16", "#859900", "#6C71C4", "#B58900", "#2AA198"),
+    heatmap="magma",
+    accent="#CB4B16",
+    dpi=140,
+)
+
+PHOSPHOR_THEME = _spec_theme(
+    "phosphor",
+    figure_bg="#0A140F",
+    axes_bg="#0D1A12",
+    ink="#7DFFB0",
+    grid_color="#1F7A4D",
+    grid_linestyle="-",
+    grid_linewidth=0.6,
+    cycle=("#00E676", "#FFB300", "#40C4FF", "#FF6E9C", "#B388FF", "#EEFF41"),
+    heatmap="viridis",
+    accent="#00E676",
+    dpi=130,
+)
+
+EMBER_THEME = _spec_theme(
+    "ember",
+    figure_bg="#1A1614",
+    axes_bg="#221C19",
+    ink="#E8DDD3",
+    grid_color="#4A403A",
+    grid_linestyle="--",
+    grid_linewidth=0.6,
+    cycle=("#3B6EA5", "#D98324", "#5FB49C", "#C77DFF", "#E8C547", "#E5657A"),
+    heatmap="inferno",
+    accent="#D98324",
+    dpi=140,
+)
+
+
 BUILTIN_THEMES: Mapping[str, Theme] = MappingProxyType(
     {
         HORNLAB_THEME.name: HORNLAB_THEME,
         DARK_THEME.name: DARK_THEME,
+        GRANITE_THEME.name: GRANITE_THEME,
+        ABYSS_THEME.name: ABYSS_THEME,
+        BLUEPRINT_THEME.name: BLUEPRINT_THEME,
+        JOURNAL_THEME.name: JOURNAL_THEME,
+        CONTRAST_THEME.name: CONTRAST_THEME,
+        SEPIA_THEME.name: SEPIA_THEME,
+        PHOSPHOR_THEME.name: PHOSPHOR_THEME,
+        EMBER_THEME.name: EMBER_THEME,
     }
 )
 
@@ -356,6 +605,14 @@ __all__ = [
     "Theme",
     "HORNLAB_THEME",
     "DARK_THEME",
+    "GRANITE_THEME",
+    "ABYSS_THEME",
+    "BLUEPRINT_THEME",
+    "JOURNAL_THEME",
+    "CONTRAST_THEME",
+    "SEPIA_THEME",
+    "PHOSPHOR_THEME",
+    "EMBER_THEME",
     "BUILTIN_THEMES",
     "get_theme",
     "set_theme",
