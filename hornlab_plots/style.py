@@ -510,6 +510,37 @@ def theme(theme: Theme | str) -> Iterator[Theme]:
 theme_context = theme
 
 
+def theme_rc_context(theme: Theme | str | None = None):
+    """Enter ``matplotlib.rc_context`` for the theme's rc params.
+
+    Designed themes carry their spec'd grid linestyle/weight (and any font
+    fields) in ``Theme.rc_params``; wrapping figure construction in this
+    context applies them to every rc-sensitive artist. The legacy
+    ``hornlab``/``dark`` themes have empty rc_params, so the context is a
+    no-op and their renders stay byte-identical.
+    """
+    return matplotlib.rc_context(resolve_theme(theme).matplotlib_rc_params())
+
+
+def theme_grid_kwargs(theme: Theme | str | None = None, *, linewidth: float) -> dict[str, Any]:
+    """Grid-line style kwargs honoring the theme's ``rc_params`` overrides.
+
+    Renderers pass explicit per-role grid linewidths (primary vs secondary
+    lines), which would silently override ``grid.linewidth`` set via
+    ``matplotlib.rc_context``. This helper keeps the caller's default unless
+    the theme pins ``grid.linewidth``, and adds ``linestyle`` only when the
+    theme pins ``grid.linestyle`` — so themes with empty rc_params produce
+    exactly the pre-override matplotlib call (byte-identical renders).
+    """
+    theme_obj = resolve_theme(theme)
+    kwargs: dict[str, Any] = {
+        "linewidth": float(theme_obj.rc_params.get("grid.linewidth", linewidth)),
+    }
+    if "grid.linestyle" in theme_obj.rc_params:
+        kwargs["linestyle"] = str(theme_obj.rc_params["grid.linestyle"])
+    return kwargs
+
+
 _COLOR_FIELD_ALIASES = {
     "figure_bg": "figure_bg",
     "background": "figure_bg",
@@ -620,6 +651,8 @@ __all__ = [
     "theme_context",
     "resolve_theme",
     "apply_theme_overrides",
+    "theme_rc_context",
+    "theme_grid_kwargs",
     "MIN_DB",
     "MAX_DB",
     "FRACTIONAL_OCTAVE",

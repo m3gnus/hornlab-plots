@@ -46,9 +46,9 @@ from matplotlib.ticker import FuncFormatter
 import numpy as np
 
 try:
-    from .style import apply_theme_overrides
+    from .style import apply_theme_overrides, theme_grid_kwargs
 except ImportError:  # pragma: no cover - direct ``python complex_analysis.py`` use.
-    from hornlab_plots.style import apply_theme_overrides
+    from hornlab_plots.style import apply_theme_overrides, theme_grid_kwargs
 
 _trapz = getattr(np, "trapezoid", None) or np.trapz
 
@@ -87,8 +87,23 @@ def _style_ax(ax, xlabel="", ylabel="", title="", grid=True):
     for spine in ax.spines.values():
         spine.set_color(theme_obj.spine_color)
     if grid:
-        ax.grid(True, which="major", color=theme_obj.grid_color, alpha=theme_obj.grid_alpha, linewidth=0.5)
-        ax.grid(True, which="minor", color=theme_obj.grid_color, alpha=theme_obj.grid_alpha_minor, linewidth=0.3)
+        # Explicit reads of Theme.rc_params (grid.linestyle/linewidth) so the
+        # designed themes' grid styles reach these per-plot ax.grid calls;
+        # empty rc_params (hornlab/dark) keep the exact legacy call.
+        ax.grid(
+            True,
+            which="major",
+            color=theme_obj.grid_color,
+            alpha=theme_obj.grid_alpha,
+            **theme_grid_kwargs(theme_obj, linewidth=0.5),
+        )
+        ax.grid(
+            True,
+            which="minor",
+            color=theme_obj.grid_color,
+            alpha=theme_obj.grid_alpha_minor,
+            **theme_grid_kwargs(theme_obj, linewidth=0.3),
+        )
 
 
 def _finish_fig(fig, out, suptitle=""):
@@ -459,7 +474,12 @@ def plot_phase_polar(d: ComplexDirectivity, out: Path,
         ax.set_title(f"{freq_label} Hz", color=theme_obj.text_color, fontsize=11,
                      fontweight="bold", pad=12)
         ax.tick_params(colors=theme_obj.tick_color, labelsize=7)
-        ax.grid(True, color=theme_obj.grid_color, alpha=theme_obj.grid_alpha, linewidth=0.5)
+        ax.grid(
+            True,
+            color=theme_obj.grid_color,
+            alpha=theme_obj.grid_alpha,
+            **theme_grid_kwargs(theme_obj, linewidth=0.5),
+        )
         ax.spines["polar"].set_color(theme_obj.spine_color)
         _add_legend(ax, loc="upper left", bbox_to_anchor=(-0.15, 1.08))
     return _finish_fig(fig, out, suptitle=f"{d.label} — Phase Polar")

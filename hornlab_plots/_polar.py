@@ -12,7 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .style import apply_theme_overrides
+from .style import apply_theme_overrides, theme_grid_kwargs, theme_rc_context
 
 
 def _field_to_db(values):
@@ -91,46 +91,53 @@ def _render_polar_line_figure(
     line_colors=None,
 ):
     theme_obj = apply_theme_overrides(theme, colors=colors, line_colors=line_colors)
-    fig, ax = plt.subplots(figsize=(9.5, 5.5))
-    fig.patch.set_facecolor(theme_obj.figure_bg)
-    ax.set_facecolor(theme_obj.axes_bg)
+    with theme_rc_context(theme_obj):
+        fig, ax = plt.subplots(figsize=(9.5, 5.5))
+        fig.patch.set_facecolor(theme_obj.figure_bg)
+        ax.set_facecolor(theme_obj.axes_bg)
 
-    cmap = plt.get_cmap("viridis", max(len(selected_freqs), 2))
-    line_palette = tuple(line_colors) if line_colors is not None else None
-    for idx, (freq, row) in enumerate(zip(selected_freqs, rows)):
-        ax.plot(
-            angles,
-            row,
-            lw=2.0,
-            color=line_palette[idx % len(line_palette)] if line_palette else cmap(idx),
-            label=f"{freq:g} Hz",
+        cmap = plt.get_cmap("viridis", max(len(selected_freqs), 2))
+        line_palette = tuple(line_colors) if line_colors is not None else None
+        for idx, (freq, row) in enumerate(zip(selected_freqs, rows)):
+            ax.plot(
+                angles,
+                row,
+                lw=2.0,
+                color=line_palette[idx % len(line_palette)] if line_palette else cmap(idx),
+                label=f"{freq:g} Hz",
+            )
+
+        ax.axhline(0.0, color=theme_obj.grid_color, lw=0.8, alpha=0.55)
+        ax.grid(
+            True,
+            which="both",
+            color=theme_obj.grid_color,
+            alpha=0.28,
+            **theme_grid_kwargs(theme_obj, linewidth=0.7),
         )
-
-    ax.axhline(0.0, color=theme_obj.grid_color, lw=0.8, alpha=0.55)
-    ax.grid(True, which="both", color=theme_obj.grid_color, alpha=0.28, linewidth=0.7)
-    ax.set_xlabel("Angle [deg]", color=theme_obj.text_color, fontsize=11)
-    ax.set_ylabel(ylabel or "dB relative to reference angle", color=theme_obj.text_color, fontsize=11)
-    if title:
-        ax.set_title(title, color=theme_obj.text_color, fontsize=13, fontweight="600", pad=8)
-    if xlim is not None:
-        ax.set_xlim(*xlim)
-    else:
-        ax.set_xlim(float(angles[0]), float(angles[-1]))
-    if ylim is not None:
-        ax.set_ylim(*ylim)
-    ax.tick_params(colors=theme_obj.tick_color, labelsize=9)
-    for spine in ax.spines.values():
-        spine.set_color(theme_obj.spine_color)
-    ax.legend(
-        loc="best",
-        fontsize=9,
-        facecolor=theme_obj.axes_bg,
-        edgecolor=theme_obj.spine_color,
-        labelcolor=theme_obj.text_color,
-        framealpha=0.88,
-    )
-    fig.tight_layout()
-    return fig
+        ax.set_xlabel("Angle [deg]", color=theme_obj.text_color, fontsize=11)
+        ax.set_ylabel(ylabel or "dB relative to reference angle", color=theme_obj.text_color, fontsize=11)
+        if title:
+            ax.set_title(title, color=theme_obj.text_color, fontsize=13, fontweight="600", pad=8)
+        if xlim is not None:
+            ax.set_xlim(*xlim)
+        else:
+            ax.set_xlim(float(angles[0]), float(angles[-1]))
+        if ylim is not None:
+            ax.set_ylim(*ylim)
+        ax.tick_params(colors=theme_obj.tick_color, labelsize=9)
+        for spine in ax.spines.values():
+            spine.set_color(theme_obj.spine_color)
+        ax.legend(
+            loc="best",
+            fontsize=9,
+            facecolor=theme_obj.axes_bg,
+            edgecolor=theme_obj.spine_color,
+            labelcolor=theme_obj.text_color,
+            framealpha=0.88,
+        )
+        fig.tight_layout()
+        return fig
 
 
 def polar_line_b64(

@@ -343,6 +343,22 @@ def test_directivity_default_render_uses_hornlab_theme_values():
         plt.close(fig)
 
 
+def test_heatmap_reference_contour_legend_entry_exists():
+    import matplotlib.pyplot as plt
+    from hornlab_plots._heatmap import _build_figure_from_planes, _build_planes_from_legacy
+
+    freqs, directivity = _synthetic_legacy_dict(n_freq=8, n_angle=21)
+    planes = _build_planes_from_legacy(freqs, {"horizontal": directivity["horizontal"]})
+
+    fig = _build_figure_from_planes(planes, reference_level=-6.0)
+    try:
+        legend = fig.axes[0].get_legend()
+        assert legend is not None
+        assert "ref @ -6 dB" in [text.get_text() for text in legend.get_texts()]
+    finally:
+        plt.close(fig)
+
+
 def test_legacy_grid_helpers_match_wg():
     """`log_grid_lines` and `preferred_frequency_ticks` must produce the
     same values WG's `directivity_plot.py` did. Pin a few known cases."""

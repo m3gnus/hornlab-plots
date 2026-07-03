@@ -271,3 +271,76 @@ def test_default_render_is_pixel_identical_to_explicit_hornlab():
 def test_unknown_theme_error_lists_registered_names():
     with pytest.raises(ValueError, match="granite"):
         style.get_theme("no-such-theme")
+
+
+def _vertical_grid_lines(ax):
+    """Log-frequency grid lines: single-x Line2D artists on the axes."""
+    return [
+        line
+        for line in ax.get_lines()
+        if len(set(np.atleast_1d(line.get_xdata()).tolist())) == 1
+    ]
+
+
+def test_designed_theme_grid_style_reaches_rendered_artists():
+    """Companion to the parity gate: a designed theme's rc_params grid
+    linestyle/weight must show up on real rendered grid artists, while the
+    legacy hornlab theme (empty rc_params) keeps its pre-rc_params solid
+    0.5/0.7 grid untouched."""
+    import matplotlib.pyplot as plt
+
+    from hornlab_plots.charts import _build_frequency_response_figure
+
+    freqs = np.geomspace(100.0, 20000.0, 24)
+    spl = 100.0 + 2.0 * np.sin(np.log10(freqs))
+    curves = [hlp.FrequencyResponseCurve(freqs, spl, "On-axis", role="combined")]
+
+    # granite spec: grid.linestyle "--", grid.linewidth 0.6
+    fig = _build_frequency_response_figure(curves, theme="granite")
+    try:
+        ax = fig.axes[0]
+        y_grid = ax.yaxis.get_gridlines()
+        v_grid = _vertical_grid_lines(ax)
+        assert y_grid and v_grid
+        for artist in [*y_grid, *v_grid]:
+            assert artist.get_linestyle() == "--"
+            assert artist.get_linewidth() == pytest.approx(0.6)
+    finally:
+        plt.close(fig)
+
+    fig = _build_frequency_response_figure(curves, theme="hornlab")
+    try:
+        ax = fig.axes[0]
+        for gridline in ax.yaxis.get_gridlines():
+            assert gridline.get_linestyle() == "-"
+            assert gridline.get_linewidth() == pytest.approx(0.5)
+        v_grid = _vertical_grid_lines(ax)
+        assert v_grid
+        assert {round(line.get_linewidth(), 3) for line in v_grid} <= {0.5, 0.7}
+        assert all(line.get_linestyle() == "-" for line in v_grid)
+    finally:
+        plt.close(fig)
+
+
+def test_designed_theme_grid_style_reaches_heatmap_artists():
+    """The directivity heatmap's log-frequency/angle grid lines honor the
+    designed theme's grid style too."""
+    import matplotlib.pyplot as plt
+
+    from hornlab_plots._heatmap import _build_figure_from_planes, _build_planes_from_legacy
+
+    hfreqs = np.geomspace(200.0, 16000.0, 8).tolist()
+    angles_deg = np.linspace(-90.0, 90.0, 13)
+    pattern = [[[float(a), -abs(float(a)) * 0.1] for a in angles_deg] for _ in hfreqs]
+    planes = _build_planes_from_legacy(hfreqs, {"horizontal": pattern})
+
+    fig = _build_figure_from_planes(planes, theme="granite")
+    try:
+        ax = fig.axes[0]
+        grid_lines = ax.get_lines()  # only the axvline/axhline grid helpers
+        assert grid_lines
+        for line in grid_lines:
+            assert line.get_linestyle() == "--"
+            assert line.get_linewidth() == pytest.approx(0.6)
+    finally:
+        plt.close(fig)

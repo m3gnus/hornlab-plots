@@ -26,6 +26,22 @@ Public API:
 - ``hornlab_plots.complex_analysis`` — complex-pressure analysis plots used
   by WG's ``/api/render-complex-analysis`` route and CLI wrapper.
 
+Derived-output renderers (ported from the Fusion addin; see
+``hornlab_plots.derived`` for the engineering ``exp(+j*omega*t)``
+complex-pressure contract):
+
+- ``save_interference_heatmap(output_path, freqs, pressure_by_source, ...)``
+  — coherent-vs-incoherent driver-sum ratio heatmap per plane
+  (``interference_ratio_db`` exposes the underlying math).
+- ``save_directivity_power_plot(output_path, freqs, di_db, power_db, ...)``
+  — DI + power response on twin axes.
+- ``save_beamwidth_plot(output_path, freqs, beamwidths_deg, ...)`` —
+  -6 dB beamwidth vs frequency per plane.
+- ``save_group_delay_plot(output_path, freqs, group_delay_s, ...)`` —
+  on-axis group delay vs frequency.
+- ``save_excursion_plot(output_path, freqs, excursion_m, ...)`` — cone
+  excursion vs frequency with optional Xmax marker.
+
 Lower-level primitives:
 
 - ``render_single_heatmap(ax, ...)`` — render onto a caller-supplied Axes.
@@ -69,6 +85,14 @@ from ._polar import (
     polar_line_b64,
     prepare_polar_line_data,
     save_polar_line_plot,
+)
+from .derived import (
+    interference_ratio_db,
+    save_beamwidth_plot,
+    save_directivity_power_plot,
+    save_excursion_plot,
+    save_group_delay_plot,
+    save_interference_heatmap,
 )
 from .style import (
     ABYSS_THEME,
@@ -114,6 +138,13 @@ __all__ = [
     "FrequencyResponseCurve",
     "set_spl_window",
     "spl_window",
+    # Derived-output renderers (Fusion addin ports)
+    "interference_ratio_db",
+    "save_interference_heatmap",
+    "save_directivity_power_plot",
+    "save_beamwidth_plot",
+    "save_group_delay_plot",
+    "save_excursion_plot",
     # Themes
     "Theme",
     "HORNLAB_THEME",

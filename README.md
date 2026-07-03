@@ -71,6 +71,18 @@ b64 = hlp.impedance_b64(freqs, z_real, z_imag)
 hlp.save_directivity_plot(path, frequencies, directivity)
 hlp.save_frequency_response_plot(path, curves, title="On-axis response")
 hlp.save_impedance_plot(path, freqs, z_real, z_imag)
+
+# Derived-output renderers (promoted from the Fusion addin; data in, path
+# out, mesh-valid marker kwargs where the originals support them). See
+# hornlab_plots.derived for the engineering exp(+jwt) complex-pressure
+# contract on the interference inputs.
+hlp.save_interference_heatmap(path, freqs, {"MF": p_mf, "HF": p_hf},
+                              angles_deg, ("horizontal", "vertical"),
+                              crossovers_hz=[900.0])
+hlp.save_directivity_power_plot(path, freqs, di_db, power_response_db)
+hlp.save_beamwidth_plot(path, freqs, {"horizontal": bw_h, "vertical": bw_v})
+hlp.save_group_delay_plot(path, freqs, group_delay_s)
+hlp.save_excursion_plot(path, freqs, excursion_m, label="MF", xmax_m=3.5e-3)
 ```
 
 ### Canonical Frequency-Response Rules
@@ -140,10 +152,13 @@ python scripts/render_theme_gallery.py
 ```
 
 The designed themes' grid linestyle/weight ride in `Theme.rc_params`
-(`grid.linestyle` / `grid.linewidth`); apply them with
-`matplotlib.rc_context(theme.matplotlib_rc_params())` when composing your
-own figures. The heatmap dB window stays a data decision (`MIN_DB`/`MAX_DB`),
-never a per-theme style decision.
+(`grid.linestyle` / `grid.linewidth`). The package renderers apply them
+automatically (`style.theme_rc_context` around figure construction plus
+`style.theme_grid_kwargs` explicit reads where per-role grid linewidths
+would otherwise win); `hornlab`/`dark` have empty rc_params, so their output
+stays byte-identical. When composing your own figures, apply them with
+`matplotlib.rc_context(theme.matplotlib_rc_params())`. The heatmap dB window
+stays a data decision (`MIN_DB`/`MAX_DB`), never a per-theme style decision.
 
 ## Installation
 

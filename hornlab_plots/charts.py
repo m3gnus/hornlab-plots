@@ -22,6 +22,8 @@ from ._grid import freq_formatter, log_grid_lines, preferred_frequency_ticks
 from .style import (
     DPI,
     apply_theme_overrides,
+    theme_grid_kwargs,
+    theme_rc_context,
 )
 
 
@@ -89,7 +91,12 @@ def _apply_canonical_axes(ax, xlabel, ylabel, title, *, theme=None, colors=None)
     ax.tick_params(colors=theme_obj.tick_color, labelsize=9)
     for spine in ax.spines.values():
         spine.set_color(theme_obj.spine_color)
-    ax.grid(True, alpha=theme_obj.secondary_grid_alpha, color=theme_obj.grid_color, linewidth=0.5)
+    ax.grid(
+        True,
+        alpha=theme_obj.secondary_grid_alpha,
+        color=theme_obj.grid_color,
+        **theme_grid_kwargs(theme_obj, linewidth=0.5),
+    )
 
 
 def _setup_dark_axes(ax, xlabel, ylabel, title, *, theme=None, colors=None):
@@ -105,14 +112,29 @@ def _add_log_grid(ax, freq_min, freq_max, *, detailed=False, theme=None, colors=
         if ticks:
             ax.set_xticks(ticks)
         for freq in ticks:
-            ax.axvline(freq, color=theme_obj.grid_color, alpha=theme_obj.primary_grid_alpha, linewidth=0.7)
+            ax.axvline(
+                freq,
+                color=theme_obj.grid_color,
+                alpha=theme_obj.primary_grid_alpha,
+                **theme_grid_kwargs(theme_obj, linewidth=0.7),
+            )
         for freq in log_grid_lines(freq_min, freq_max):
             if not any(np.isclose(freq, tick, rtol=1e-6, atol=1e-6) for tick in ticks):
-                ax.axvline(freq, color=theme_obj.grid_color, alpha=theme_obj.secondary_grid_alpha, linewidth=0.5)
+                ax.axvline(
+                    freq,
+                    color=theme_obj.grid_color,
+                    alpha=theme_obj.secondary_grid_alpha,
+                    **theme_grid_kwargs(theme_obj, linewidth=0.5),
+                )
         return
 
     for freq in log_grid_lines(freq_min, freq_max):
-        ax.axvline(freq, color=theme_obj.grid_color, alpha=theme_obj.secondary_grid_alpha, linewidth=0.5)
+        ax.axvline(
+            freq,
+            color=theme_obj.grid_color,
+            alpha=theme_obj.secondary_grid_alpha,
+            **theme_grid_kwargs(theme_obj, linewidth=0.5),
+        )
 
 
 def _fig_to_base64(fig, dpi=150):
@@ -205,86 +227,87 @@ def _build_frequency_response_figure(
     if not response_curves:
         return None
 
-    plotted = []
-    fig, ax = plt.subplots(1, 1, figsize=figsize)
-    fig.patch.set_facecolor(theme_obj.figure_bg)
+    with theme_rc_context(theme_obj):
+        plotted = []
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        fig.patch.set_facecolor(theme_obj.figure_bg)
 
-    for curve in response_curves:
-        freqs = np.asarray(curve.frequencies, dtype=float)
-        values = np.asarray(curve.spl_db, dtype=float)
-        if freqs.size == 0 or values.size == 0:
-            continue
-        n = min(freqs.size, values.size)
-        freqs = freqs[:n]
-        values = values[:n]
-        finite = np.isfinite(freqs) & np.isfinite(values) & (freqs > 0)
-        if not np.any(finite):
-            continue
-        freqs = freqs[finite]
-        values = values[finite]
-        plotted.append((freqs, values))
-        ax.semilogx(
-            freqs,
-            values,
-            label=curve.label,
-            **_response_curve_style(curve, theme=theme_obj),
-        )
+        for curve in response_curves:
+            freqs = np.asarray(curve.frequencies, dtype=float)
+            values = np.asarray(curve.spl_db, dtype=float)
+            if freqs.size == 0 or values.size == 0:
+                continue
+            n = min(freqs.size, values.size)
+            freqs = freqs[:n]
+            values = values[:n]
+            finite = np.isfinite(freqs) & np.isfinite(values) & (freqs > 0)
+            if not np.any(finite):
+                continue
+            freqs = freqs[finite]
+            values = values[finite]
+            plotted.append((freqs, values))
+            ax.semilogx(
+                freqs,
+                values,
+                label=curve.label,
+                **_response_curve_style(curve, theme=theme_obj),
+            )
 
-    if not plotted:
-        plt.close(fig)
-        return None
+        if not plotted:
+            plt.close(fig)
+            return None
 
-    if crossover_hz is not None:
-        label = crossover_label or f"XO {float(crossover_hz):.0f} Hz"
-        ax.axvline(
-            float(crossover_hz),
-            color=theme_obj.text_color,
-            linestyle="--",
-            linewidth=1.0,
-            alpha=0.72,
-            label=label,
-            zorder=1,
-        )
+        if crossover_hz is not None:
+            label = crossover_label or f"XO {float(crossover_hz):.0f} Hz"
+            ax.axvline(
+                float(crossover_hz),
+                color=theme_obj.text_color,
+                linestyle="--",
+                linewidth=1.0,
+                alpha=0.72,
+                label=label,
+                zorder=1,
+            )
 
-    if mesh_valid_hz is not None or mesh_valid_radiating_hz is not None:
-        from ._heatmap import _draw_mesh_valid_markers
+        if mesh_valid_hz is not None or mesh_valid_radiating_hz is not None:
+            from ._heatmap import _draw_mesh_valid_markers
 
-        freq_lo = min(float(np.min(freqs)) for freqs, _values in plotted)
-        freq_hi = max(float(np.max(freqs)) for freqs, _values in plotted)
-        _draw_mesh_valid_markers(
+            freq_lo = min(float(np.min(freqs)) for freqs, _values in plotted)
+            freq_hi = max(float(np.max(freqs)) for freqs, _values in plotted)
+            _draw_mesh_valid_markers(
+                ax,
+                lo=freq_lo,
+                hi=freq_hi,
+                mesh_valid_hz=mesh_valid_hz,
+                mesh_valid_radiating_hz=mesh_valid_radiating_hz,
+                span_zorder=0,
+                line_zorder=1,
+                theme=theme_obj,
+            )
+
+        _apply_canonical_axes(ax, xlabel, ylabel, title, theme=theme_obj)
+        ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
+        freq_min = min(float(np.min(freqs)) for freqs, _values in plotted)
+        freq_max = max(float(np.max(freqs)) for freqs, _values in plotted)
+        ax.set_xlim(*(xlim or (freq_min, freq_max)))
+        set_spl_window(
             ax,
-            lo=freq_lo,
-            hi=freq_hi,
-            mesh_valid_hz=mesh_valid_hz,
-            mesh_valid_radiating_hz=mesh_valid_radiating_hz,
-            span_zorder=0,
-            line_zorder=1,
-            theme=theme_obj,
+            [values for _freqs, values in plotted],
+            span_db=span_db,
+            top_margin_db=top_margin_db,
+            floor_db=floor_db,
         )
-
-    _apply_canonical_axes(ax, xlabel, ylabel, title, theme=theme_obj)
-    ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
-    freq_min = min(float(np.min(freqs)) for freqs, _values in plotted)
-    freq_max = max(float(np.max(freqs)) for freqs, _values in plotted)
-    ax.set_xlim(*(xlim or (freq_min, freq_max)))
-    set_spl_window(
-        ax,
-        [values for _freqs, values in plotted],
-        span_db=span_db,
-        top_margin_db=top_margin_db,
-        floor_db=floor_db,
-    )
-    _add_log_grid(ax, ax.get_xlim()[0], ax.get_xlim()[1], detailed=True, theme=theme_obj)
-    legend = ax.legend(
-        loc="best",
-        fontsize=9,
-        facecolor=theme_obj.axes_bg,
-        edgecolor=theme_obj.spine_color,
-        labelcolor=theme_obj.text_color,
-    )
-    legend.get_frame().set_alpha(0.92)
-    fig.tight_layout(pad=1.5)
-    return fig
+        _add_log_grid(ax, ax.get_xlim()[0], ax.get_xlim()[1], detailed=True, theme=theme_obj)
+        legend = ax.legend(
+            loc="best",
+            fontsize=9,
+            facecolor=theme_obj.axes_bg,
+            edgecolor=theme_obj.spine_color,
+            labelcolor=theme_obj.text_color,
+        )
+        legend.get_frame().set_alpha(0.92)
+        fig.tight_layout(pad=1.5)
+        return fig
 
 
 def frequency_response_multi_b64(curves, dpi=DPI, **kwargs):
@@ -385,42 +408,43 @@ def directivity_index_b64(
     if not planes:
         return None
 
-    fig, ax = plt.subplots(1, 1, figsize=(10, 4))
-    fig.patch.set_facecolor(theme_obj.figure_bg)
+    with theme_rc_context(theme_obj):
+        fig, ax = plt.subplots(1, 1, figsize=(10, 4))
+        fig.patch.set_facecolor(theme_obj.figure_bg)
 
-    all_vals = []
-    for index, (plane_id, di_vals) in enumerate(planes.items()):
-        color = (
-            line_palette[index % len(line_palette)]
-            if line_palette
-            else plane_colors.get(plane_id, "#81c784")
-        )
-        label = plane_labels.get(plane_id, plane_id.capitalize())
-        ax.semilogx(freqs, di_vals, color=color, linewidth=1.5, label=label)
-        valid = di_vals[~np.isnan(di_vals)]
-        if len(valid) > 0:
-            all_vals.extend(valid.tolist())
+        all_vals = []
+        for index, (plane_id, di_vals) in enumerate(planes.items()):
+            color = (
+                line_palette[index % len(line_palette)]
+                if line_palette
+                else plane_colors.get(plane_id, "#81c784")
+            )
+            label = plane_labels.get(plane_id, plane_id.capitalize())
+            ax.semilogx(freqs, di_vals, color=color, linewidth=1.5, label=label)
+            valid = di_vals[~np.isnan(di_vals)]
+            if len(valid) > 0:
+                all_vals.extend(valid.tolist())
 
-    if not all_vals:
-        plt.close(fig)
-        return None
+        if not all_vals:
+            plt.close(fig)
+            return None
 
-    if len(planes) > 1:
-        ax.legend(loc="upper left", fontsize=9, facecolor=theme_obj.axes_bg,
-                  edgecolor=theme_obj.spine_color, labelcolor=theme_obj.text_color)
+        if len(planes) > 1:
+            ax.legend(loc="upper left", fontsize=9, facecolor=theme_obj.axes_bg,
+                      edgecolor=theme_obj.spine_color, labelcolor=theme_obj.text_color)
 
-    _setup_dark_axes(ax, "Frequency [Hz]", "DI [dB]", "Directivity Index", theme=theme_obj)
-    ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
+        _setup_dark_axes(ax, "Frequency [Hz]", "DI [dB]", "Directivity Index", theme=theme_obj)
+        ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
-    ax.set_xlim(freqs[0], freqs[-1])
-    di_min, di_max = np.nanmin(all_vals), np.nanmax(all_vals)
-    margin = max(2, (di_max - di_min) * 0.1)
-    ax.set_ylim(min(0, di_min - margin), di_max + margin)
+        ax.set_xlim(freqs[0], freqs[-1])
+        di_min, di_max = np.nanmin(all_vals), np.nanmax(all_vals)
+        margin = max(2, (di_max - di_min) * 0.1)
+        ax.set_ylim(min(0, di_min - margin), di_max + margin)
 
-    _add_log_grid(ax, freqs[0], freqs[-1], detailed=True, theme=theme_obj)
-    ax.tick_params(axis="x", labelsize=8)
+        _add_log_grid(ax, freqs[0], freqs[-1], detailed=True, theme=theme_obj)
+        ax.tick_params(axis="x", labelsize=8)
 
-    fig.tight_layout(pad=1.5)
+        fig.tight_layout(pad=1.5)
     return _fig_to_base64(fig, dpi)
 
 
@@ -474,38 +498,39 @@ def _build_impedance_figure(frequencies, real, imaginary, *, theme=None, colors=
     if len(freqs) == 0 or len(re_vals) == 0:
         return None
 
-    fig, ax = plt.subplots(1, 1, figsize=(10, 4))
-    fig.patch.set_facecolor(theme_obj.figure_bg)
+    with theme_rc_context(theme_obj):
+        fig, ax = plt.subplots(1, 1, figsize=(10, 4))
+        fig.patch.set_facecolor(theme_obj.figure_bg)
 
-    real_color = line_palette[0] if line_palette else theme_obj.impedance_colors["real"]
-    imag_color = (
-        line_palette[1 % len(line_palette)]
-        if line_palette
-        else theme_obj.impedance_colors["imaginary"]
-    )
-    ax.semilogx(freqs, re_vals, color=real_color, linewidth=1.5, label="Re(Z)")
-    if len(im_vals) > 0:
-        ax.semilogx(freqs, im_vals, color=imag_color, linewidth=1.5, label="Im(Z)")
+        real_color = line_palette[0] if line_palette else theme_obj.impedance_colors["real"]
+        imag_color = (
+            line_palette[1 % len(line_palette)]
+            if line_palette
+            else theme_obj.impedance_colors["imaginary"]
+        )
+        ax.semilogx(freqs, re_vals, color=real_color, linewidth=1.5, label="Re(Z)")
+        if len(im_vals) > 0:
+            ax.semilogx(freqs, im_vals, color=imag_color, linewidth=1.5, label="Im(Z)")
 
-    _setup_dark_axes(ax, "Frequency [Hz]", "Z [Pa·s/m]", "Acoustic Impedance", theme=theme_obj)
-    ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
+        _setup_dark_axes(ax, "Frequency [Hz]", "Z [Pa·s/m]", "Acoustic Impedance", theme=theme_obj)
+        ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
-    ax.set_xlim(freqs[0], freqs[-1])
+        ax.set_xlim(freqs[0], freqs[-1])
 
-    all_vals = np.concatenate([re_vals, im_vals]) if len(im_vals) > 0 else re_vals
-    z_min, z_max = np.nanmin(all_vals), np.nanmax(all_vals)
-    margin = max(50, (z_max - z_min) * 0.1)
-    ax.set_ylim(z_min - margin, z_max + margin)
+        all_vals = np.concatenate([re_vals, im_vals]) if len(im_vals) > 0 else re_vals
+        z_min, z_max = np.nanmin(all_vals), np.nanmax(all_vals)
+        margin = max(50, (z_max - z_min) * 0.1)
+        ax.set_ylim(z_min - margin, z_max + margin)
 
-    _add_log_grid(ax, freqs[0], freqs[-1], theme=theme_obj)
+        _add_log_grid(ax, freqs[0], freqs[-1], theme=theme_obj)
 
-    legend = ax.legend(loc="upper right", fontsize=10,
-                       facecolor=theme_obj.axes_bg, edgecolor=theme_obj.spine_color,
-                       labelcolor=theme_obj.text_color)
-    legend.get_frame().set_alpha(0.9)
+        legend = ax.legend(loc="upper right", fontsize=10,
+                           facecolor=theme_obj.axes_bg, edgecolor=theme_obj.spine_color,
+                           labelcolor=theme_obj.text_color)
+        legend.get_frame().set_alpha(0.9)
 
-    fig.tight_layout(pad=1.5)
-    return fig
+        fig.tight_layout(pad=1.5)
+        return fig
 
 
 def render_all_charts_b64(

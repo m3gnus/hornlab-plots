@@ -38,6 +38,8 @@ from .style import (
     MAX_DB,
     MIN_DB,
     apply_theme_overrides,
+    theme_grid_kwargs,
+    theme_rc_context,
 )
 
 
@@ -269,6 +271,17 @@ def _draw_mesh_valid_markers(
     return handles
 
 
+def _set_contour_path_effects(contour_set, path_effects):
+    """Apply path effects across matplotlib's ContourSet API transition."""
+    setter = getattr(contour_set, "set_path_effects", None)
+    if callable(setter):
+        setter(path_effects)
+        return
+
+    for collection in getattr(contour_set, "collections", ()):
+        collection.set_path_effects(path_effects)
+
+
 def render_single_heatmap(
     ax, freqs, angles, values, title, reference_level=-6.0,
     mesh_valid_hz=None, mesh_valid_radiating_hz=None,
@@ -333,11 +346,10 @@ def render_single_heatmap(
             linewidths=0.6,
             alpha=0.45,
         )
-        for collection in contour.collections:
-            collection.set_path_effects([
-                pe.Stroke(linewidth=1.2, foreground=theme_obj.contour_outline, alpha=0.8),
-                pe.Normal(),
-            ])
+        _set_contour_path_effects(contour, [
+            pe.Stroke(linewidth=1.2, foreground=theme_obj.contour_outline, alpha=0.8),
+            pe.Normal(),
+        ])
     except Exception:
         pass
 
@@ -350,11 +362,10 @@ def render_single_heatmap(
             colors=theme_obj.reference_contour_color,
             linewidths=1.5,
         )
-        for collection in ref_contour.collections:
-            collection.set_path_effects([
-                pe.Stroke(linewidth=2.6, foreground=theme_obj.contour_outline, alpha=0.85),
-                pe.Normal(),
-            ])
+        _set_contour_path_effects(ref_contour, [
+            pe.Stroke(linewidth=2.6, foreground=theme_obj.contour_outline, alpha=0.85),
+            pe.Normal(),
+        ])
     except Exception:
         ref_contour = None
 
@@ -370,11 +381,21 @@ def render_single_heatmap(
         ax.set_xticks(detailed_ticks)
 
     for freq in detailed_ticks:
-        ax.axvline(freq, color=theme_obj.grid_color, alpha=theme_obj.primary_grid_alpha, linewidth=0.7)
+        ax.axvline(
+            freq,
+            color=theme_obj.grid_color,
+            alpha=theme_obj.primary_grid_alpha,
+            **theme_grid_kwargs(theme_obj, linewidth=0.7),
+        )
 
     for freq in log_grid_lines(freqs[0], freqs[-1]):
         if not contains_frequency(detailed_ticks, freq):
-            ax.axvline(freq, color=theme_obj.grid_color, alpha=theme_obj.secondary_grid_alpha, linewidth=0.5)
+            ax.axvline(
+                freq,
+                color=theme_obj.grid_color,
+                alpha=theme_obj.secondary_grid_alpha,
+                **theme_grid_kwargs(theme_obj, linewidth=0.5),
+            )
 
     angle_range = angles[-1] - angles[0]
     if angle_range > 120:
@@ -386,7 +407,12 @@ def render_single_heatmap(
     start = np.ceil(angles[0] / angle_step) * angle_step
     for a in np.arange(start, angles[-1] + angle_step * 0.5, angle_step):
         if angles[0] < a < angles[-1]:
-            ax.axhline(a, color=theme_obj.grid_color, alpha=theme_obj.secondary_grid_alpha, linewidth=0.5)
+            ax.axhline(
+                a,
+                color=theme_obj.grid_color,
+                alpha=theme_obj.secondary_grid_alpha,
+                **theme_grid_kwargs(theme_obj, linewidth=0.5),
+            )
 
     mesh_valid_handles = _draw_mesh_valid_markers(
         ax,
@@ -497,42 +523,43 @@ def _build_figure_from_planes(
         by_key["vertical"]["values_raw"],
     )
 
-    if symmetric:
-        fig, axes = plt.subplots(1, 1, figsize=(11, 5))
-        axes = [axes]
-        titles = ["Directivity (H = V, Symmetric)"]
-        datasets = [(
-            by_key["horizontal"]["freqs"],
-            by_key["horizontal"]["angles"],
-            by_key["horizontal"]["values"],
-        )]
-    else:
-        plane_count = len(planes)
-        fig_height = 5 if plane_count == 1 else (4 * plane_count)
-        fig, axes = plt.subplots(plane_count, 1, figsize=(11, fig_height))
-        if not isinstance(axes, (list, np.ndarray)):
+    with theme_rc_context(theme_obj):
+        if symmetric:
+            fig, axes = plt.subplots(1, 1, figsize=(11, 5))
             axes = [axes]
+            titles = ["Directivity (H = V, Symmetric)"]
+            datasets = [(
+                by_key["horizontal"]["freqs"],
+                by_key["horizontal"]["angles"],
+                by_key["horizontal"]["values"],
+            )]
         else:
-            axes = list(np.atleast_1d(axes))
-        titles = [_plane_title(entry["key"]) for entry in planes]
-        datasets = [(entry["freqs"], entry["angles"], entry["values"]) for entry in planes]
+            plane_count = len(planes)
+            fig_height = 5 if plane_count == 1 else (4 * plane_count)
+            fig, axes = plt.subplots(plane_count, 1, figsize=(11, fig_height))
+            if not isinstance(axes, (list, np.ndarray)):
+                axes = [axes]
+            else:
+                axes = list(np.atleast_1d(axes))
+            titles = [_plane_title(entry["key"]) for entry in planes]
+            datasets = [(entry["freqs"], entry["angles"], entry["values"]) for entry in planes]
 
-    fig.patch.set_facecolor(theme_obj.figure_bg)
-    for ax, title, (plot_freqs, plot_angles, plot_values) in zip(axes, titles, datasets):
-        render_single_heatmap(
-            ax,
-            plot_freqs,
-            plot_angles,
-            plot_values,
-            title,
-            reference_level=reference_level,
-            mesh_valid_hz=mesh_valid_hz,
-            mesh_valid_radiating_hz=mesh_valid_radiating_hz,
-            theme=theme_obj,
-        )
+        fig.patch.set_facecolor(theme_obj.figure_bg)
+        for ax, title, (plot_freqs, plot_angles, plot_values) in zip(axes, titles, datasets):
+            render_single_heatmap(
+                ax,
+                plot_freqs,
+                plot_angles,
+                plot_values,
+                title,
+                reference_level=reference_level,
+                mesh_valid_hz=mesh_valid_hz,
+                mesh_valid_radiating_hz=mesh_valid_radiating_hz,
+                theme=theme_obj,
+            )
 
-    fig.tight_layout(pad=1.5)
-    return fig
+        fig.tight_layout(pad=1.5)
+        return fig
 
 
 def directivity_heatmap_from_legacy_dict(
@@ -661,18 +688,19 @@ def directivity_heatmap_b64(
     theme_obj = apply_theme_overrides(theme, colors=colors)
     angles_p, freqs_p, values_p = prepare_heatmap_data(angles, freqs, values_raw)
 
-    fig, ax = plt.subplots(1, 1, figsize=(11, 5))
-    fig.patch.set_facecolor(theme_obj.figure_bg)
-    render_single_heatmap(
-        ax,
-        freqs_p,
-        angles_p,
-        values_p,
-        title or "Normalized Directivity",
-        reference_level=reference_level,
-        theme=theme_obj,
-    )
-    fig.tight_layout(pad=1.5)
+    with theme_rc_context(theme_obj):
+        fig, ax = plt.subplots(1, 1, figsize=(11, 5))
+        fig.patch.set_facecolor(theme_obj.figure_bg)
+        render_single_heatmap(
+            ax,
+            freqs_p,
+            angles_p,
+            values_p,
+            title or "Normalized Directivity",
+            reference_level=reference_level,
+            theme=theme_obj,
+        )
+        fig.tight_layout(pad=1.5)
 
     buf = io.BytesIO()
     fig.savefig(
