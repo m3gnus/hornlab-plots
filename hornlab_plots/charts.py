@@ -475,9 +475,20 @@ def save_impedance_plot(
     theme=None,
     colors=None,
     line_colors=None,
+    title="Acoustic Impedance",
+    ylabel="Z [Pa·s/m]",
 ):
     """Save acoustic impedance chart to a PNG file on disk."""
-    fig = _build_impedance_figure(frequencies, real, imaginary, theme=theme, colors=colors, line_colors=line_colors)
+    fig = _build_impedance_figure(
+        frequencies,
+        real,
+        imaginary,
+        theme=theme,
+        colors=colors,
+        line_colors=line_colors,
+        title=title,
+        ylabel=ylabel,
+    )
     if fig is None:
         return None
     out = Path(output_path)
@@ -488,7 +499,17 @@ def save_impedance_plot(
     return out
 
 
-def _build_impedance_figure(frequencies, real, imaginary, *, theme=None, colors=None, line_colors=None):
+def _build_impedance_figure(
+    frequencies,
+    real,
+    imaginary,
+    *,
+    theme=None,
+    colors=None,
+    line_colors=None,
+    title="Acoustic Impedance",
+    ylabel="Z [Pa·s/m]",
+):
     theme_obj = apply_theme_overrides(theme, colors=colors, line_colors=line_colors)
     line_palette = tuple(line_colors) if line_colors is not None else None
     freqs = np.array(frequencies, dtype=float)
@@ -512,7 +533,7 @@ def _build_impedance_figure(frequencies, real, imaginary, *, theme=None, colors=
         if len(im_vals) > 0:
             ax.semilogx(freqs, im_vals, color=imag_color, linewidth=1.5, label="Im(Z)")
 
-        _setup_dark_axes(ax, "Frequency [Hz]", "Z [Pa·s/m]", "Acoustic Impedance", theme=theme_obj)
+        _setup_dark_axes(ax, "Frequency [Hz]", ylabel, title, theme=theme_obj)
         ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
         ax.set_xlim(freqs[0], freqs[-1])

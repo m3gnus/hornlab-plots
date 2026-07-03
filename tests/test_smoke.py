@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
+import matplotlib.figure
 import numpy as np
 import pytest
 
@@ -224,6 +225,39 @@ def test_save_impedance_plot_to_disk(tmp_path):
     result = hlp.save_impedance_plot(out, freqs, real, imag)
     assert result == out
     assert out.exists()
+
+
+def test_save_impedance_plot_label_overrides_land_on_rendered_figure(tmp_path, monkeypatch):
+    freqs = np.geomspace(100.0, 20000.0, 30)
+    real = 4.0 + np.sin(np.log10(freqs) * 2)
+    imag = 2.0 * np.cos(np.log10(freqs) * 2)
+    out = tmp_path / "electrical_impedance.png"
+    captured = {}
+    original_savefig = matplotlib.figure.Figure.savefig
+
+    def spy_savefig(self, *args, **kwargs):
+        ax = self.axes[0]
+        captured["title"] = ax.get_title()
+        captured["ylabel"] = ax.get_ylabel()
+        return original_savefig(self, *args, **kwargs)
+
+    monkeypatch.setattr(matplotlib.figure.Figure, "savefig", spy_savefig)
+
+    result = hlp.save_impedance_plot(
+        out,
+        freqs,
+        real,
+        imag,
+        title="Electrical Input Impedance",
+        ylabel="|Z| [ohm] / phase-split real+imag [ohm]",
+    )
+
+    assert result == out
+    assert out.exists()
+    assert captured == {
+        "title": "Electrical Input Impedance",
+        "ylabel": "|Z| [ohm] / phase-split real+imag [ohm]",
+    }
 
 
 def test_render_all_charts_b64():
