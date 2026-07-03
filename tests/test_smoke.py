@@ -356,25 +356,7 @@ def test_legacy_grid_helpers_match_wg():
         assert any(abs(t - expected) < 1e-3 for t in ticks), f"missing tick {expected} in {ticks}"
 
 
-def test_optimizer_isobar_jet_template(tmp_path):
-    """Optimizer-Dashboard jet-style isobar template produces a PNG."""
-    from hornlab_plots.templates import optimizer_isobar_jet
+def test_templates_export_no_public_presets():
+    import hornlab_plots.templates as templates
 
-    angles = np.linspace(-180.0, 180.0, 73)
-    freqs = np.geomspace(200.0, 20000.0, 40)
-    sigma = 60.0
-    spl = (-25.0) * (1 - np.exp(-(angles ** 2) / (2 * sigma ** 2)))
-    spl_matrix = np.tile(spl[:, None], (1, freqs.size))
-
-    out = tmp_path / "isobar_h.png"
-    optimizer_isobar_jet(
-        out,
-        angle_deg=angles,
-        freqs_hz=freqs,
-        spl_matrix=spl_matrix,
-        title="Horizontal Isobar",
-        clip_min_db=-30.0,
-        clip_max_db=0.0,
-    )
-    assert out.exists()
-    assert out.stat().st_size > 500
+    assert templates.__all__ == []

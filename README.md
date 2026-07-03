@@ -29,6 +29,11 @@ small numpy arrays plus a handful of styling kwargs and return either a
 base64-encoded PNG string (for HTTP routes), a PIL Image, or write to
 disk when an output path is supplied.
 
+Optimizer-Dashboard-specific templates, including the jet isobar,
+impedance, and beamwidth leaderboard plots, moved back into the private
+Optimizer-Dashboard package. `hornlab-plots` intentionally exports only
+shared renderer APIs.
+
 ```python
 import hornlab_plots as hlp
 
