@@ -197,6 +197,100 @@ def _response_curve_style(
     }
 
 
+_PHASE_CONVENTION_ALIASES = {
+    "": "exp(-ikr)", "auto": "exp(-ikr)", "default": "exp(-ikr)", "legacy": "exp(-ikr)",
+    "bempp": "exp(-ikr)", "bempp-cl": "exp(-ikr)", "bemppcl": "exp(-ikr)",
+    "exp(-ikr)": "exp(-ikr)", "-ikr": "exp(-ikr)", "e(-ikr)": "exp(-ikr)",
+    "metal": "exp(+ikr)", "exp(+ikr)": "exp(+ikr)", "+ikr": "exp(+ikr)", "e(+ikr)": "exp(+ikr)",
+}
+
+
+def _phase_propagation_sign(convention) -> float:
+    """+1 for exp(+ikr) (metal), -1 for exp(-ikr) (bempp/default)."""
+    key = str(convention or "").strip().lower().replace(" ", "").replace("_", "-")
+    return -1.0 if _PHASE_CONVENTION_ALIASES.get(key, "exp(-ikr)") == "exp(-ikr)" else 1.0
+
+
+def _passband_weights(freqs, spl):
+    """Output-level weights emphasizing the passband (within 12 dB of peak SPL)."""
+    if spl is None:
+        return None
+    spl = np.asarray(spl, dtype=float)
+    if spl.shape != freqs.shape or np.count_nonzero(np.isfinite(spl)) < 2:
+        return None
+    finite = np.isfinite(spl)
+    peak = float(np.max(spl[finite]))
+    weights = np.zeros_like(spl)
+    band = finite & (spl >= peak - 12.0)
+    if np.count_nonzero(band) < 2:
+        band = finite
+    weights[band] = 10.0 ** ((spl[band] - peak) / 20.0)
+    return weights
+
+
+def _weighted_linfit(x, y, weights):
+    """Weighted least-squares slope/intercept for ``y ≈ intercept + slope*x``."""
+    total = float(np.sum(weights))
+    if total <= 0.0:
+        return 0.0, 0.0
+    x_mean = float(np.sum(weights * x) / total)
+    y_mean = float(np.sum(weights * y) / total)
+    sxx = float(np.sum(weights * (x - x_mean) ** 2))
+    if sxx <= 0.0:
+        return 0.0, y_mean
+    slope = float(np.sum(weights * (x - x_mean) * (y - y_mean)) / sxx)
+    return slope, y_mean - slope * x_mean
+
+
+def _flatten_phase_for_display(
+    frequencies,
+    phase_degrees,
+    spl_db=None,
+    *,
+    reference_distance_m=None,
+    sound_speed_m_per_s=343.0,
+    phase_time_convention=None,
+):
+    """Return ``(freqs, phase_deg)`` referenced and detrended for display.
+
+    Two steps: (1) remove the observer propagation delay ``2*pi*f*r/c`` so
+    ``np.unwrap`` can track the phase — an un-referenced r=2 m response wraps
+    ~100x by 20 kHz and would alias; (2) remove the residual group-delay slope
+    weighted by output level, so the curve sits flat where the speaker radiates
+    most and crossover/resonance deviations stay visible.
+    """
+    freqs = np.asarray(frequencies, dtype=float)
+    phase = np.asarray(phase_degrees, dtype=float)
+    n = min(freqs.size, phase.size)
+    if n == 0:
+        return np.array([], dtype=float), np.array([], dtype=float)
+    freqs, phase = freqs[:n], phase[:n]
+    spl = np.asarray(spl_db, dtype=float)[:n] if spl_db is not None and len(spl_db) >= n else None
+    finite = np.isfinite(freqs) & np.isfinite(phase) & (freqs > 0)
+    if not np.any(finite):
+        return np.array([], dtype=float), np.array([], dtype=float)
+    freqs, phase = freqs[finite], phase[finite]
+    if spl is not None:
+        spl = spl[finite]
+
+    radians = np.deg2rad(phase)
+    distance = float(reference_distance_m) if reference_distance_m else float("nan")
+    speed = float(sound_speed_m_per_s) if sound_speed_m_per_s else float("nan")
+    if np.isfinite(distance) and distance > 0.0 and np.isfinite(speed) and speed > 0.0:
+        sign = _phase_propagation_sign(phase_time_convention)
+        propagation = sign * (2.0 * np.pi * freqs * distance / speed)
+        radians = ((radians - propagation) + np.pi) % (2.0 * np.pi) - np.pi
+    deg = np.rad2deg(np.unwrap(radians))
+
+    weights = _passband_weights(freqs, spl)
+    if weights is not None and np.count_nonzero(weights) >= 2:
+        slope, intercept = _weighted_linfit(freqs, deg, weights)
+        deg = deg - (intercept + slope * freqs)
+    else:
+        deg = deg - float(np.median(deg))
+    return freqs, deg
+
+
 def _build_frequency_response_figure(
     curves,
     *,
@@ -212,6 +306,12 @@ def _build_frequency_response_figure(
     top_margin_db: float = 3.0,
     floor_db: float | None = None,
     figsize: tuple[float, float] = (10.0, 4.8),
+    phase_degrees=None,
+    phase_frequencies=None,
+    phase_weight_spl=None,
+    phase_reference_distance_m=None,
+    sound_speed_m_per_s: float = 343.0,
+    phase_time_convention=None,
     theme=None,
     colors=None,
     line_colors=None,
@@ -298,7 +398,54 @@ def _build_frequency_response_figure(
             floor_db=floor_db,
         )
         _add_log_grid(ax, ax.get_xlim()[0], ax.get_xlim()[1], detailed=True, theme=theme_obj)
+
+        phase_ax = None
+        if phase_degrees is not None:
+            ph_freqs = (
+                phase_frequencies
+                if phase_frequencies is not None
+                else response_curves[0].frequencies
+            )
+            weight_spl = (
+                phase_weight_spl
+                if phase_weight_spl is not None
+                else response_curves[0].spl_db
+            )
+            pf, pdeg = _flatten_phase_for_display(
+                ph_freqs,
+                phase_degrees,
+                weight_spl,
+                reference_distance_m=phase_reference_distance_m,
+                sound_speed_m_per_s=sound_speed_m_per_s,
+                phase_time_convention=phase_time_convention,
+            )
+            if pf.size:
+                phase_color = theme_obj.impedance_colors.get(
+                    "imaginary", theme_obj.reference_contour_color
+                )
+                phase_ax = ax.twinx()
+                phase_ax.set_facecolor("none")
+                phase_ax.set_ylabel("Phase [deg]", color=phase_color, fontsize=11)
+                phase_ax.tick_params(axis="y", colors=phase_color, labelsize=9)
+                phase_ax.spines["right"].set_color(phase_color)
+                phase_ax.spines["top"].set_color(theme_obj.spine_color)
+                phase_ax.semilogx(
+                    pf, pdeg, color=phase_color, linewidth=1.25,
+                    linestyle="--", label="Phase (referenced)",
+                )
+                abs_ph = np.abs(pdeg[np.isfinite(pdeg)])
+                span = float(np.percentile(abs_ph, 98)) if abs_ph.size else 180.0
+                span = max(30.0, min(360.0, span * 1.15))
+                phase_ax.set_ylim(-span, span)
+
+        handles, labels = ax.get_legend_handles_labels()
+        if phase_ax is not None:
+            ph_handles, ph_labels = phase_ax.get_legend_handles_labels()
+            handles += ph_handles
+            labels += ph_labels
         legend = ax.legend(
+            handles,
+            labels,
             loc="best",
             fontsize=9,
             facecolor=theme_obj.axes_bg,
@@ -346,8 +493,18 @@ def frequency_response_b64(
     colors=None,
     line_colors=None,
     response_colors=None,
+    phase_degrees=None,
+    phase_reference_distance_m=None,
+    sound_speed_m_per_s=343.0,
+    phase_time_convention=None,
 ):
-    """Render on-axis SPL vs frequency and return base64-encoded PNG."""
+    """Render on-axis SPL vs frequency and return base64-encoded PNG.
+
+    When ``phase_degrees`` is supplied, an on-axis phase trace is drawn on a
+    secondary axis, referenced to the observer distance and detrended by output
+    level so it reads flat across the passband (see
+    :func:`_flatten_phase_for_display`).
+    """
     return frequency_response_multi_b64(
         [FrequencyResponseCurve(frequencies, spl, "On-axis", role="combined")],
         title="Frequency Response (On-Axis)",
@@ -356,6 +513,12 @@ def frequency_response_b64(
         colors=colors,
         line_colors=line_colors,
         response_colors=response_colors,
+        phase_degrees=phase_degrees,
+        phase_frequencies=frequencies,
+        phase_weight_spl=spl,
+        phase_reference_distance_m=phase_reference_distance_m,
+        sound_speed_m_per_s=sound_speed_m_per_s if sound_speed_m_per_s else 343.0,
+        phase_time_convention=phase_time_convention,
     )
 
 
@@ -457,9 +620,13 @@ def impedance_b64(
     theme=None,
     colors=None,
     line_colors=None,
+    ylabel="Z [Pa·s/m]",
 ):
     """Render acoustic impedance (real + imaginary) and return base64 PNG."""
-    fig = _build_impedance_figure(frequencies, real, imaginary, theme=theme, colors=colors, line_colors=line_colors)
+    fig = _build_impedance_figure(
+        frequencies, real, imaginary, theme=theme, colors=colors,
+        line_colors=line_colors, ylabel=ylabel,
+    )
     if fig is None:
         return None
     return _fig_to_base64(fig, dpi)
@@ -540,7 +707,11 @@ def _build_impedance_figure(
 
         all_vals = np.concatenate([re_vals, im_vals]) if len(im_vals) > 0 else re_vals
         z_min, z_max = np.nanmin(all_vals), np.nanmax(all_vals)
-        margin = max(50, (z_max - z_min) * 0.1)
+        # Auto-scale the y-margin to the data range. A former max(50, ...) floor
+        # flattened normalized Z/(rho*c) data (range ~0-4) into a straight line;
+        # a relative margin handles both physical (hundreds) and normalized Z.
+        z_range = z_max - z_min
+        margin = z_range * 0.1 if z_range > 0 else max(abs(z_max) * 0.1, 1.0)
         ax.set_ylim(z_min - margin, z_max + margin)
 
         _add_log_grid(ax, freqs[0], freqs[-1], theme=theme_obj)
@@ -552,6 +723,22 @@ def _build_impedance_figure(
 
         fig.tight_layout(pad=1.5)
         return fig
+
+
+def _impedance_ylabel(units):
+    """Map an impedance-units hint to an axis label.
+
+    Callers such as Waveguide Generator send ``impedance_units='Z/(rho*c)'``
+    for specific acoustic impedance normalized to rho*c; label it accordingly
+    instead of the physical ``Pa·s/m`` default so the normalized curve reads
+    correctly.
+    """
+    if units is None:
+        return "Z [Pa·s/m]"
+    text = str(units).strip().lower().replace(" ", "")
+    if "rho" in text or "ρ" in text or text in {"specific", "normalized", "normalised"}:
+        return "Z / ρc"
+    return "Z [Pa·s/m]"
 
 
 def render_all_charts_b64(
@@ -576,6 +763,7 @@ def render_all_charts_b64(
     imp_freqs = payload.get("impedance_frequencies", []) or freqs
     imp_real = payload.get("impedance_real", [])
     imp_imag = payload.get("impedance_imaginary", [])
+    imp_units = payload.get("impedance_units")
     directivity = payload.get("directivity", {})
 
     charts = {}
@@ -588,6 +776,10 @@ def render_all_charts_b64(
         colors=colors,
         line_colors=line_colors,
         response_colors=response_colors,
+        phase_degrees=payload.get("phase_degrees") or None,
+        phase_reference_distance_m=payload.get("phase_reference_distance_m"),
+        sound_speed_m_per_s=payload.get("sound_speed_m_per_s") or 343.0,
+        phase_time_convention=payload.get("phase_time_convention"),
     ) if spl else None
     di_input = payload.get("di", [])
     charts["directivity_index"] = directivity_index_b64(
@@ -606,6 +798,7 @@ def render_all_charts_b64(
         theme=theme,
         colors=colors,
         line_colors=line_colors,
+        ylabel=_impedance_ylabel(imp_units),
     ) if imp_real else None
 
     dir_b64 = None
