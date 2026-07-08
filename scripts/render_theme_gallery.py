@@ -46,6 +46,7 @@ THEME_INTENTS: dict[str, str] = {
     "sepia": "Solarized-warm low-glare reading theme for long sessions and printed reports.",
     "phosphor": "CRT oscilloscope instrument aesthetic; green-screen lab-bench mood with luminance-separated leads.",
     "ember": "Warm charcoal studio wildcard; steel-blue vs stoked-ember lead pair, warm/cool alternating cycle.",
+    "classic": "Light Klippel-report look on white; jet-family heatmap with a CVD-aware blue/red lead pair mirroring its cold/hot ends.",
 }
 
 

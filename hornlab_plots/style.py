@@ -452,6 +452,143 @@ EMBER_THEME = _spec_theme(
 )
 
 
+# Classic Klippel theme ----------------------------------------------------
+#
+# A light "classic audio-measurement report" look built from the Klippel-style
+# directivity colormap: white page, near-black ink, a thin light-gray grid, and
+# a white->blue->cyan->green->yellow->orange->red heatmap. The line palette is
+# drawn from the same hue family but tuned for legibility on white and
+# separability under the common CVD types — the blue/red lead pair mirrors the
+# cold/hot ends of the heatmap and carries lf/mf, H/V, and real/imag. Unlike the
+# Fable/Opus spec themes it uses a CUSTOM (unregistered) heatmap colormap, so it
+# is built like the legacy hornlab/dark route with a dedicated builder rather
+# than through ``_spec_theme`` (which resolves a stock colormap name). Its
+# spec'd grid linestyle/weight ride in ``rc_params`` as with the designed themes.
+
+_CLASSIC_INK = "#1A1A1A"
+_CLASSIC_BG = "#FFFFFF"
+_CLASSIC_GRID = "#CFCFCF"
+_CLASSIC_ACCENT = "#C2179C"
+_CLASSIC_CYCLE = ("#1F5FBF", "#D32222", "#2E8B3D", "#E07B10", "#8E3B7E", "#5A5A5A")
+
+# fraction 0.0 = bottom of scale (MIN_DB), 1.0 = top of scale (MAX_DB / 0 dB).
+_KLIPPEL_COLORS = [
+    (0.00, "#ffffff"),
+    (0.10, "#c8dcf0"),
+    (0.20, "#7ba7d7"),
+    (0.33, "#3a6fc0"),
+    (0.45, "#3aa6c0"),
+    (0.55, "#3ec06a"),
+    (0.68, "#9ed23a"),
+    (0.78, "#e6e63a"),
+    (0.88, "#f0a030"),
+    (1.00, "#e11414"),
+]
+
+
+def _classic_heatmap_cmap() -> Colormap:
+    return LinearSegmentedColormap.from_list("classic_klippel", _KLIPPEL_COLORS, N=256)
+
+
+def _classic_diverging_cmap() -> Colormap:
+    # Blue<->white<->red, anchored on the palette lead pair (residual/error maps).
+    return LinearSegmentedColormap.from_list(
+        "classic_diverging",
+        ["#14418A", "#1F5FBF", "#8FB3E0", "#FFFFFF", "#E88B8B", "#D32222", "#8E1616"],
+        N=256,
+    )
+
+
+def _classic_cyclic_cmap() -> Colormap:
+    # Wraps through the Klippel hues (blue->...->red) back to blue via the accent.
+    return LinearSegmentedColormap.from_list(
+        "classic_cyclic",
+        [
+            "#1F5FBF",
+            "#3AA6C0",
+            "#3EC06A",
+            "#E6E63A",
+            "#F0A030",
+            "#E11414",
+            "#C2179C",
+            "#8E3B7E",
+            "#1F5FBF",
+        ],
+        N=256,
+    )
+
+
+def _classic_theme(name: str) -> Theme:
+    """Build the light Klippel-style ``classic`` theme (custom heatmap map)."""
+    role_colors = {
+        "figure_bg": _CLASSIC_BG,
+        "background": _CLASSIC_BG,
+        "axes_bg": _CLASSIC_BG,
+        "axes": _CLASSIC_BG,
+        "text": _CLASSIC_INK,
+        "tick": _CLASSIC_INK,
+        "spine": _CLASSIC_INK,
+        "grid": _CLASSIC_GRID,
+        "contour_outline": _CLASSIC_BG,
+        "reference_contour": _CLASSIC_ACCENT,
+        "mesh_limit": _MESH_LIMIT_COLOR,
+        "accent": _CLASSIC_ACCENT,
+    }
+    response_colors = {
+        "lf": _CLASSIC_CYCLE[0],
+        "mf": _CLASSIC_CYCLE[1],
+        "hf": _CLASSIC_CYCLE[2],
+        "combined": _CLASSIC_INK,
+        "raw": _CLASSIC_CYCLE[5],
+        "other": _CLASSIC_CYCLE[4],
+    }
+    plane_colors = {
+        "horizontal": _CLASSIC_CYCLE[0],
+        "vertical": _CLASSIC_CYCLE[1],
+        "diagonal": _CLASSIC_CYCLE[2],
+    }
+    impedance_colors = {
+        "real": _CLASSIC_CYCLE[0],
+        "imaginary": _CLASSIC_CYCLE[1],
+    }
+    return Theme(
+        name=name,
+        figure_bg=_CLASSIC_BG,
+        axes_bg=_CLASSIC_BG,
+        text_color=_CLASSIC_INK,
+        tick_color=_CLASSIC_INK,
+        spine_color=_CLASSIC_INK,
+        grid_color=_CLASSIC_GRID,
+        contour_outline=_CLASSIC_BG,
+        reference_contour_color=_CLASSIC_ACCENT,
+        mesh_limit_color=_MESH_LIMIT_COLOR,
+        primary_grid_alpha=1.0,
+        secondary_grid_alpha=0.5,
+        grid_alpha=1.0,
+        grid_alpha_minor=0.5,
+        fill_alpha=_FILL_ALPHA,
+        dpi=160,
+        palette=_CLASSIC_CYCLE,
+        role_colors=_freeze_mapping(role_colors),
+        line_colors=_CLASSIC_CYCLE,
+        response_colors=_freeze_mapping(response_colors),
+        plane_colors=_freeze_mapping(plane_colors),
+        impedance_colors=_freeze_mapping(impedance_colors),
+        heatmap_cmap=_classic_heatmap_cmap(),
+        diverging_cmap=_classic_diverging_cmap(),
+        cyclic_cmap=_classic_cyclic_cmap(),
+        rc_params=MappingProxyType(
+            {
+                "grid.linestyle": "-",
+                "grid.linewidth": 0.6,
+            }
+        ),
+    )
+
+
+CLASSIC_THEME = _classic_theme("classic")
+
+
 BUILTIN_THEMES: Mapping[str, Theme] = MappingProxyType(
     {
         HORNLAB_THEME.name: HORNLAB_THEME,
@@ -464,6 +601,7 @@ BUILTIN_THEMES: Mapping[str, Theme] = MappingProxyType(
         SEPIA_THEME.name: SEPIA_THEME,
         PHOSPHOR_THEME.name: PHOSPHOR_THEME,
         EMBER_THEME.name: EMBER_THEME,
+        CLASSIC_THEME.name: CLASSIC_THEME,
     }
 )
 
@@ -644,6 +782,7 @@ __all__ = [
     "SEPIA_THEME",
     "PHOSPHOR_THEME",
     "EMBER_THEME",
+    "CLASSIC_THEME",
     "BUILTIN_THEMES",
     "get_theme",
     "set_theme",

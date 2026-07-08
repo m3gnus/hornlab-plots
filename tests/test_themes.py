@@ -27,6 +27,7 @@ EXPECTED_THEME_NAMES = {
     "sepia",
     "phosphor",
     "ember",
+    "classic",
 }
 
 THEME_NAMES = sorted(style.BUILTIN_THEMES)

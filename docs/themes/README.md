@@ -17,6 +17,7 @@ synthetic directivity heatmap (the theme's colormap) at the theme's DPI.
 | `sepia` | Solarized-warm low-glare reading theme for long sessions and printed reports. | [sepia.png](sepia.png) |
 | `phosphor` | CRT oscilloscope instrument aesthetic; green-screen lab-bench mood with luminance-separated leads. | [phosphor.png](phosphor.png) |
 | `ember` | Warm charcoal studio wildcard; steel-blue vs stoked-ember lead pair, warm/cool alternating cycle. | [ember.png](ember.png) |
+| `classic` | Light Klippel-report look on white; jet-family heatmap with a CVD-aware blue/red lead pair mirroring its cold/hot ends. | [classic.png](classic.png) |
 
 ## hornlab
 
@@ -57,3 +58,7 @@ synthetic directivity heatmap (the theme's colormap) at the theme's DPI.
 ## ember
 
 ![ember](ember.png)
+
+## classic
+
+![classic](classic.png)
