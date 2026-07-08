@@ -126,7 +126,7 @@ from hornlab_plots.style import (
 
 ## Themes
 
-Ten built-in themes register in `hornlab_plots.style.BUILTIN_THEMES`. The
+Eleven built-in themes register in `hornlab_plots.style.BUILTIN_THEMES`. The
 default is `hornlab` and its output is pixel-identical to the pre-theme-API
 renderer; the others opt in per call (`theme="granite"`) or process-wide
 (`set_theme(...)` / `theme_context(...)`).
@@ -143,6 +143,7 @@ renderer; the others opt in per call (`theme="granite"`) or process-wide
 | `sepia` | Solarized-warm low-glare reading theme for long sessions and printed reports. |
 | `phosphor` | CRT oscilloscope instrument aesthetic; green-screen lab-bench mood with luminance-separated leads. |
 | `ember` | Warm charcoal studio wildcard; steel-blue vs stoked-ember lead pair, warm/cool alternating cycle. |
+| `classic` | Klippel-report light theme; the white→blue→green→yellow→red directivity colormap with a coordinated blue/red/green line palette. |
 
 Previews for every theme live in the [theme gallery](docs/themes/README.md)
 (`docs/themes/<name>.png`), regenerated with:

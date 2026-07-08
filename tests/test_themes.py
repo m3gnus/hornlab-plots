@@ -274,6 +274,23 @@ def test_unknown_theme_error_lists_registered_names():
         style.get_theme("no-such-theme")
 
 
+def test_classic_theme_design_pins():
+    """Pin the classic theme's identity: light page + Klippel heatmap + palette."""
+    theme = style.get_theme("classic")
+    assert theme.figure_bg == "#FFFFFF"
+    assert theme.axes_bg == "#FFFFFF"
+    assert theme.line_colors == (
+        "#1F5FBF", "#D32222", "#2E8B3D", "#E07B10", "#8E3B7E", "#5A5A5A",
+    )
+    assert theme.line_colors == theme.palette
+    assert theme.heatmap_cmap.name == "classic_klippel"
+    # Klippel colormap runs white (scale bottom) -> red (scale top).
+    r0, g0, b0 = mcolors.to_rgb(theme.heatmap_cmap(0.0))
+    assert min(r0, g0, b0) > 0.9
+    r1, g1, b1 = mcolors.to_rgb(theme.heatmap_cmap(1.0))
+    assert r1 > 0.8 and g1 < 0.3 and b1 < 0.3
+
+
 def _vertical_grid_lines(ax):
     """Log-frequency grid lines: single-x Line2D artists on the axes."""
     return [

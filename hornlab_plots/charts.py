@@ -206,9 +206,20 @@ _PHASE_CONVENTION_ALIASES = {
 
 
 def _phase_propagation_sign(convention) -> float:
-    """+1 for exp(+ikr) (metal), -1 for exp(-ikr) (bempp/default)."""
+    """+1 for exp(+ikr) (metal), -1 for exp(-ikr) (bempp/default).
+
+    Tolerates decorated/backend-style labels (e.g. ``hornlab-metal-bem``) by
+    substring so an unrecognized-but-identifiable convention does not silently
+    pick the wrong sign and double the propagation phase into an unwrap alias.
+    """
     key = str(convention or "").strip().lower().replace(" ", "").replace("_", "-")
-    return -1.0 if _PHASE_CONVENTION_ALIASES.get(key, "exp(-ikr)") == "exp(-ikr)" else 1.0
+    if key in _PHASE_CONVENTION_ALIASES:
+        return -1.0 if _PHASE_CONVENTION_ALIASES[key] == "exp(-ikr)" else 1.0
+    if "+ikr" in key or "+jkr" in key or "metal" in key:
+        return 1.0
+    if "-ikr" in key or "-jkr" in key or "bempp" in key:
+        return -1.0
+    return -1.0
 
 
 def _passband_weights(freqs, spl):
@@ -517,7 +528,7 @@ def frequency_response_b64(
         phase_frequencies=frequencies,
         phase_weight_spl=spl,
         phase_reference_distance_m=phase_reference_distance_m,
-        sound_speed_m_per_s=sound_speed_m_per_s if sound_speed_m_per_s else 343.0,
+        sound_speed_m_per_s=sound_speed_m_per_s if sound_speed_m_per_s is not None else 343.0,
         phase_time_convention=phase_time_convention,
     )
 
@@ -556,10 +567,10 @@ def directivity_index_b64(
         planes = {}
         for plane_id in ("horizontal", "vertical", "diagonal"):
             vals = di.get(plane_id)
-            if vals and any(v is not None for v in vals):
+            if _nonempty(vals) and any(v is not None for v in vals):
                 arr = np.array([v if v is not None else np.nan for v in vals], dtype=float)
                 planes[plane_id] = arr
-    elif isinstance(di, list) and len(di) > 0:
+    elif isinstance(di, (list, tuple, np.ndarray)) and len(di) > 0:
         arr = np.array([v if v is not None else np.nan for v in di], dtype=float)
         if not np.all(np.isnan(arr)):
             planes = {"horizontal": arr}
@@ -683,8 +694,22 @@ def _build_impedance_figure(
     re_vals = np.array(real, dtype=float)
     im_vals = np.array(imaginary, dtype=float)
 
-    if len(freqs) == 0 or len(re_vals) == 0:
+    if freqs.size == 0 or re_vals.size == 0:
         return None
+
+    # Keep only finite, positive-frequency samples (log x-axis) with a finite
+    # real part; drop the imaginary trace if it is mismatched or non-finite.
+    n = min(freqs.size, re_vals.size)
+    freqs, re_vals = freqs[:n], re_vals[:n]
+    has_imag = im_vals.size >= n
+    im_vals = im_vals[:n] if has_imag else np.array([], dtype=float)
+    valid = np.isfinite(freqs) & (freqs > 0) & np.isfinite(re_vals)
+    if has_imag:
+        valid &= np.isfinite(im_vals)
+    if not np.any(valid):
+        return None
+    freqs, re_vals = freqs[valid], re_vals[valid]
+    im_vals = im_vals[valid] if has_imag else np.array([], dtype=float)
 
     with theme_rc_context(theme_obj):
         fig, ax = plt.subplots(1, 1, figsize=(10, 4))
@@ -725,6 +750,20 @@ def _build_impedance_figure(
         return fig
 
 
+def _nonempty(series) -> bool:
+    """True when a payload series holds at least one element (numpy-safe).
+
+    ``bool(np.array([...]))`` raises for multi-element arrays, so the payload
+    guards use this instead of plain truthiness.
+    """
+    if series is None:
+        return False
+    try:
+        return len(series) > 0
+    except TypeError:
+        return bool(series)
+
+
 def _impedance_ylabel(units):
     """Map an impedance-units hint to an axis label.
 
@@ -759,8 +798,10 @@ def render_all_charts_b64(
 
     freqs = payload.get("frequencies", [])
     spl = payload.get("spl", [])
-    di_freqs = payload.get("di_frequencies", []) or freqs
-    imp_freqs = payload.get("impedance_frequencies", []) or freqs
+    di_freqs = payload.get("di_frequencies")
+    di_freqs = di_freqs if _nonempty(di_freqs) else freqs
+    imp_freqs = payload.get("impedance_frequencies")
+    imp_freqs = imp_freqs if _nonempty(imp_freqs) else freqs
     imp_real = payload.get("impedance_real", [])
     imp_imag = payload.get("impedance_imaginary", [])
     imp_units = payload.get("impedance_units")
@@ -768,6 +809,9 @@ def render_all_charts_b64(
 
     charts = {}
 
+    phase_series = payload.get("phase_degrees")
+    if not _nonempty(phase_series):
+        phase_series = None
     charts["frequency_response"] = frequency_response_b64(
         freqs,
         spl,
@@ -776,11 +820,11 @@ def render_all_charts_b64(
         colors=colors,
         line_colors=line_colors,
         response_colors=response_colors,
-        phase_degrees=payload.get("phase_degrees") or None,
+        phase_degrees=phase_series,
         phase_reference_distance_m=payload.get("phase_reference_distance_m"),
-        sound_speed_m_per_s=payload.get("sound_speed_m_per_s") or 343.0,
+        sound_speed_m_per_s=payload.get("sound_speed_m_per_s"),
         phase_time_convention=payload.get("phase_time_convention"),
-    ) if spl else None
+    ) if _nonempty(spl) else None
     di_input = payload.get("di", [])
     charts["directivity_index"] = directivity_index_b64(
         di_freqs,
@@ -789,7 +833,7 @@ def render_all_charts_b64(
         theme=theme,
         colors=colors,
         line_colors=line_colors,
-    ) if di_input else None
+    ) if _nonempty(di_input) else None
     charts["impedance"] = impedance_b64(
         imp_freqs,
         imp_real,
@@ -799,10 +843,10 @@ def render_all_charts_b64(
         colors=colors,
         line_colors=line_colors,
         ylabel=_impedance_ylabel(imp_units),
-    ) if imp_real else None
+    ) if _nonempty(imp_real) else None
 
     dir_b64 = None
-    if directivity and freqs:
+    if _nonempty(directivity) and _nonempty(freqs):
         try:
             dir_b64 = directivity_heatmap_from_legacy_dict(freqs, directivity, dpi, theme=theme, colors=colors)
         except Exception:
