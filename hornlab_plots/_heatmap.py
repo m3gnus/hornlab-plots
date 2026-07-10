@@ -50,6 +50,11 @@ from .style import (
 def build_grid_from_legacy(freqs, patterns):
     """Convert list of ``[[angle, dB], ...]`` per frequency into 2D arrays.
 
+    Point order may vary between frequencies: values are matched by their
+    angle coordinate and linearly interpolated onto the sorted union of sampled
+    angles. Outside one pattern's sampled span, its nearest endpoint is kept.
+    Duplicate angles within one frequency are ambiguous and raise ``ValueError``.
+
     Returns ``(angles, freqs, values)`` where ``values`` is a 2D
     ``(n_angles, n_freqs)`` array. Returns ``(None, None, None)`` if the
     input is empty or contains no finite values.
@@ -57,51 +62,68 @@ def build_grid_from_legacy(freqs, patterns):
     if not patterns:
         return None, None, None
 
-    n_freqs = min(len(patterns), len(freqs))
+    freq_array = np.asarray(freqs, dtype=float)
+    n_freqs = min(len(patterns), len(freq_array))
     if n_freqs == 0:
         return None, None, None
 
-    angles = None
-    for pattern in patterns[:n_freqs]:
-        candidate = _extract_angles(pattern)
-        if candidate is not None and candidate.size > 0:
-            angles = candidate
-            break
-    if angles is None or angles.size == 0:
+    parsed_patterns = []
+    sampled_angles: set[float] = set()
+    for frequency_index, pattern in enumerate(patterns[:n_freqs]):
+        points = _extract_pattern_points(pattern, frequency_index=frequency_index)
+        parsed_patterns.append(points)
+        if points is not None:
+            sampled_angles.update(float(angle) for angle in points[0])
+
+    if not sampled_angles:
         return None, None, None
 
+    angles = np.asarray(sorted(sampled_angles), dtype=float)
     values = np.full((angles.size, n_freqs), np.nan, dtype=float)
-    for fi in range(n_freqs):
-        pattern = patterns[fi]
-        if not isinstance(pattern, list):
+    for frequency_index, points in enumerate(parsed_patterns):
+        if points is None:
             continue
-        for ai, point in enumerate(pattern[: angles.size]):
-            if not isinstance(point, (list, tuple)) or len(point) < 2:
-                continue
-            db = _safe_float(point[1])
-            if db is not None:
-                values[ai, fi] = db
+        source_angles, source_values = points
+        order = np.argsort(source_angles)
+        source_angles = source_angles[order]
+        source_values = source_values[order]
+        values[:, frequency_index] = np.interp(
+            angles,
+            source_angles,
+            source_values,
+        )
 
     keep_cols = np.any(np.isfinite(values), axis=0)
     if not np.any(keep_cols):
         return None, None, None
 
-    return angles, freqs[:n_freqs][keep_cols], values[:, keep_cols]
+    return angles, freq_array[:n_freqs][keep_cols], values[:, keep_cols]
 
 
-def _extract_angles(pattern):
+def _extract_pattern_points(pattern, *, frequency_index):
     if not isinstance(pattern, list):
         return None
-    out = []
+    angles = []
+    values = []
+    seen: set[float] = set()
     for point in pattern:
         if not isinstance(point, (list, tuple)) or len(point) < 2:
             continue
         ang = _safe_float(point[0])
-        if ang is not None:
-            out.append(ang)
-    if not out:
+        db = _safe_float(point[1])
+        if ang is None or db is None:
+            continue
+        if ang in seen:
+            raise ValueError(
+                f"duplicate angle {ang:g} in legacy directivity pattern "
+                f"at frequency index {frequency_index}"
+            )
+        seen.add(ang)
+        angles.append(ang)
+        values.append(db)
+    if not angles:
         return None
-    return np.array(out, dtype=float)
+    return np.asarray(angles, dtype=float), np.asarray(values, dtype=float)
 
 
 def _safe_float(value):

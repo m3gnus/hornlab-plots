@@ -124,6 +124,12 @@ from hornlab_plots.style import (
 )
 ```
 
+Legacy ``[angle, dB]`` pairs are matched by angle value, so their ordering may
+vary between frequencies. Missing interior angles are linearly interpolated on
+the sorted union grid; beyond a pattern's sampled span, its nearest endpoint is
+kept. An angle may appear only once in each frequency pattern; duplicates are
+rejected as ambiguous.
+
 ## Themes
 
 Eleven built-in themes register in `hornlab_plots.style.BUILTIN_THEMES`. The

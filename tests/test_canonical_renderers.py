@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import numpy as np
+import pytest
 
 import hornlab_plots as hlp
 
@@ -36,6 +37,62 @@ def test_directivity_heatmap_from_legacy_dict_returns_png():
     }
 
     _decode_png(hlp.directivity_heatmap_from_legacy_dict(freqs, directivity))
+
+
+def test_legacy_directivity_points_are_reindexed_by_angle_value():
+    from hornlab_plots._heatmap import build_grid_from_legacy
+
+    angles, freqs, values = build_grid_from_legacy(
+        [100.0, 200.0],
+        [
+            [[-10.0, -1.0], [0.0, 0.0], [10.0, -1.0]],
+            [[10.0, -2.0], [0.0, 0.0], [-10.0, -20.0]],
+        ],
+    )
+
+    np.testing.assert_allclose(angles, [-10.0, 0.0, 10.0])
+    np.testing.assert_allclose(freqs, [100.0, 200.0])
+    np.testing.assert_allclose(values[:, 1], [-20.0, 0.0, -2.0])
+
+
+def test_legacy_directivity_missing_middle_angle_is_interpolated():
+    from hornlab_plots._heatmap import build_grid_from_legacy
+
+    angles, _freqs, values = build_grid_from_legacy(
+        [100.0, 200.0],
+        [
+            [[-20.0, -2.0], [-5.0, -1.0], [10.0, 0.0]],
+            [[-20.0, -30.0], [10.0, 0.0]],
+        ],
+    )
+
+    np.testing.assert_allclose(angles, [-20.0, -5.0, 10.0])
+    np.testing.assert_allclose(values[:, 1], [-30.0, -15.0, 0.0])
+
+
+def test_legacy_directivity_missing_end_angle_uses_nearest_endpoint():
+    from hornlab_plots._heatmap import build_grid_from_legacy
+
+    angles, _freqs, values = build_grid_from_legacy(
+        [100.0, 200.0],
+        [
+            [[-20.0, -2.0], [-5.0, -1.0], [10.0, 0.0]],
+            [[-20.0, -30.0], [-5.0, -15.0]],
+        ],
+    )
+
+    np.testing.assert_allclose(angles, [-20.0, -5.0, 10.0])
+    np.testing.assert_allclose(values[:, 1], [-30.0, -15.0, -15.0])
+
+
+def test_legacy_directivity_duplicate_angles_are_rejected():
+    from hornlab_plots._heatmap import build_grid_from_legacy
+
+    with pytest.raises(ValueError, match="duplicate angle 0"):
+        build_grid_from_legacy(
+            [100.0],
+            [[[0.0, 0.0], [0.0, -1.0]]],
+        )
 
 
 def test_line_chart_renderers_return_png():
