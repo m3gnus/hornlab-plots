@@ -50,8 +50,8 @@ Lower-level primitives:
 - ``check_symmetry(h_values, v_values)``
 
 Theme API and backwards-compatible constants live in
-``hornlab_plots.style``. Optimizer-Dashboard-specific plot templates live in
-that private package, not in this public renderer.
+``hornlab_plots.style``. Project-specific plot templates live with their
+owning tools, not in this public renderer.
 """
 
 from ._grid import (

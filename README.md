@@ -19,8 +19,7 @@ wrapper around this package; non-WG consumers import `hornlab_plots` directly.
 
 `hornlab-plots` is the canonical import — `pip install -e .` it into
 any venv and call the functions directly. The WG HTTP routes become
-thin wrappers over this package; everyone else (Optimizer-Dashboard,
-MEH-Lab post scripts, forum-reply tooling) imports it directly.
+thin wrappers over this package; other downstream tooling imports it directly.
 
 ## Public API
 
@@ -29,10 +28,8 @@ small numpy arrays plus a handful of styling kwargs and return either a
 base64-encoded PNG string (for HTTP routes), a PIL Image, or write to
 disk when an output path is supplied.
 
-Optimizer-Dashboard-specific templates, including the jet isobar,
-impedance, and beamwidth leaderboard plots, moved back into the private
-Optimizer-Dashboard package. `hornlab-plots` intentionally exports only
-shared renderer APIs.
+Project-specific templates live with their owning tools. `hornlab-plots`
+intentionally exports only shared renderer APIs.
 
 ```python
 import hornlab_plots as hlp
