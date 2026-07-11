@@ -157,26 +157,48 @@ class ComplexDirectivity:
 def _patterns_to_complex(
     patterns: List[List[List[float]]], n_freq: int
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Convert WG-style directivity_complex per-axis list into theta + (n_freq, n_theta) complex array."""
+    """Convert WG complex patterns, aligning every row by angle value."""
     sample = next((pat for pat in patterns[:n_freq] if pat), None)
     if sample is None:
         raise ValueError("empty pattern list")
     n_theta = len(sample)
     angles = np.array([p[0] for p in sample], dtype=float)
+    angle_indices: dict[float, int] = {}
+    for index, angle in enumerate(angles):
+        angle_f = float(angle)
+        if angle_f in angle_indices:
+            raise ValueError(
+                f"duplicate angle {angle_f:g} in directivity_complex pattern"
+            )
+        angle_indices[angle_f] = index
     p = np.full((n_freq, n_theta), complex(np.nan, np.nan), dtype=complex)
     for fi, freq_pat in enumerate(patterns[:n_freq]):
         if not freq_pat:
             continue
         if len(freq_pat) != n_theta:
             raise RuntimeError("directivity_complex theta count changes across frequencies")
-        for ai, point in enumerate(freq_pat):
+        seen: set[float] = set()
+        for point in freq_pat:
+            if point is None or len(point) < 1:
+                continue
+            angle = float(point[0])
+            if angle in seen:
+                raise ValueError(
+                    f"duplicate angle {angle:g} in directivity_complex pattern "
+                    f"at frequency index {fi}"
+                )
+            seen.add(angle)
+            if angle not in angle_indices:
+                raise RuntimeError(
+                    "directivity_complex theta grid changes across frequencies"
+                )
             if (
                 point is not None
                 and len(point) >= 3
                 and point[1] is not None
                 and point[2] is not None
             ):
-                p[fi, ai] = complex(point[1], point[2])
+                p[fi, angle_indices[angle]] = complex(point[1], point[2])
     return angles, p
 
 

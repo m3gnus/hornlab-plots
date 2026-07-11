@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import io
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -587,35 +588,60 @@ def directivity_index_b64(
         fig.patch.set_facecolor(theme_obj.figure_bg)
 
         all_vals = []
+        all_plotted_freqs = []
+        plotted_plane_count = 0
         for index, (plane_id, di_vals) in enumerate(planes.items()):
+            n_points = min(freqs.size, di_vals.size)
+            plane_freqs = freqs[:n_points]
+            plane_vals = di_vals[:n_points]
+            valid = (
+                np.isfinite(plane_freqs)
+                & (plane_freqs > 0.0)
+                & np.isfinite(plane_vals)
+            )
+            if not np.any(valid):
+                continue
+            plane_freqs = plane_freqs[valid]
+            plane_vals = plane_vals[valid]
             color = (
                 line_palette[index % len(line_palette)]
                 if line_palette
                 else plane_colors.get(plane_id, "#81c784")
             )
             label = plane_labels.get(plane_id, plane_id.capitalize())
-            ax.semilogx(freqs, di_vals, color=color, linewidth=1.5, label=label)
-            valid = di_vals[~np.isnan(di_vals)]
-            if len(valid) > 0:
-                all_vals.extend(valid.tolist())
+            ax.semilogx(
+                plane_freqs,
+                plane_vals,
+                color=color,
+                linewidth=1.5,
+                label=label,
+            )
+            all_vals.extend(plane_vals.tolist())
+            all_plotted_freqs.extend(plane_freqs.tolist())
+            plotted_plane_count += 1
 
         if not all_vals:
             plt.close(fig)
             return None
 
-        if len(planes) > 1:
+        if plotted_plane_count > 1:
             ax.legend(loc="upper left", fontsize=9, facecolor=theme_obj.axes_bg,
                       edgecolor=theme_obj.spine_color, labelcolor=theme_obj.text_color)
 
         _setup_dark_axes(ax, "Frequency [Hz]", "DI [dB]", "Directivity Index", theme=theme_obj)
         ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
-        ax.set_xlim(freqs[0], freqs[-1])
+        freq_min = min(all_plotted_freqs)
+        freq_max = max(all_plotted_freqs)
+        if freq_min == freq_max:
+            freq_min /= 1.05
+            freq_max *= 1.05
+        ax.set_xlim(freq_min, freq_max)
         di_min, di_max = np.nanmin(all_vals), np.nanmax(all_vals)
         margin = max(2, (di_max - di_min) * 0.1)
         ax.set_ylim(min(0, di_min - margin), di_max + margin)
 
-        _add_log_grid(ax, freqs[0], freqs[-1], detailed=True, theme=theme_obj)
+        _add_log_grid(ax, freq_min, freq_max, detailed=True, theme=theme_obj)
         ax.tick_params(axis="x", labelsize=8)
 
         fig.tight_layout(pad=1.5)
@@ -792,7 +818,9 @@ def render_all_charts_b64(
     """Render all charts from a combined results payload.
 
     Returns a dict with keys ``frequency_response``, ``directivity_index``,
-    ``impedance``, ``directivity_map`` — each a base64 PNG or None.
+    ``impedance``, ``directivity_map`` — each a base64 PNG or None. Heatmap
+    failures leave ``directivity_map`` as None and emit a ``RuntimeWarning``
+    so the other independent charts can still be returned.
     """
     from ._heatmap import directivity_heatmap_from_legacy_dict
 
@@ -849,8 +877,12 @@ def render_all_charts_b64(
     if _nonempty(directivity) and _nonempty(freqs):
         try:
             dir_b64 = directivity_heatmap_from_legacy_dict(freqs, directivity, dpi, theme=theme, colors=colors)
-        except Exception:
-            pass
+        except Exception as exc:
+            warnings.warn(
+                f"directivity heatmap failed: {exc}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
     charts["directivity_map"] = dir_b64
 
     return charts

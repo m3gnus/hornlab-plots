@@ -8,6 +8,7 @@ renderer contract is covered separately in ``test_canonical_renderers.py``.
 from __future__ import annotations
 
 import base64
+import warnings
 from pathlib import Path
 
 import matplotlib.figure
@@ -200,6 +201,39 @@ def test_directivity_index_b64_per_plane_dict():
     assert _is_valid_b64_png(b64)
 
 
+@pytest.mark.parametrize(
+    "di",
+    [
+        [4.0, 5.0],
+        [4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+    ],
+)
+def test_directivity_index_b64_clips_mismatched_lengths(di):
+    freqs = [100.0, 200.0, 400.0, 800.0]
+
+    assert _is_valid_b64_png(hlp.directivity_index_b64(freqs, di))
+
+
+def test_directivity_index_b64_accepts_one_valid_point_without_axis_warning():
+    with warnings.catch_warnings(record=True) as warnings_seen:
+        warnings.simplefilter("always")
+        rendered = hlp.directivity_index_b64([100.0], [4.0])
+
+    assert not warnings_seen
+    assert _is_valid_b64_png(rendered)
+
+
+def test_render_all_charts_clips_di_when_di_frequencies_are_omitted():
+    out = hlp.render_all_charts_b64(
+        {
+            "frequencies": [100.0, 200.0, 400.0, 800.0],
+            "di": [4.0, 5.0],
+        }
+    )
+
+    assert _is_valid_b64_png(out["directivity_index"])
+
+
 def test_impedance_b64():
     freqs = np.geomspace(100.0, 20000.0, 30)
     real = 400.0 + 50.0 * np.sin(np.log10(freqs) * 2)
@@ -275,6 +309,20 @@ def test_render_all_charts_b64():
     assert _is_valid_b64_png(out["directivity_index"])
     assert _is_valid_b64_png(out["impedance"])
     assert _is_valid_b64_png(out["directivity_map"])
+
+
+def test_render_all_charts_warns_when_directivity_heatmap_fails():
+    payload = {
+        "frequencies": [100.0],
+        "directivity": {
+            "horizontal": [[[0.0, 0.0], [0.0, -1.0]]],
+        },
+    }
+
+    with pytest.warns(RuntimeWarning, match="duplicate angle 0"):
+        out = hlp.render_all_charts_b64(payload)
+
+    assert out["directivity_map"] is None
 
 
 def test_theme_constants_importable():
