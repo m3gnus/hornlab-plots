@@ -16,6 +16,7 @@ Public API:
   same as the legacy-dict signature but writes to disk.
 - ``frequency_response_b64(frequencies, spl)`` — on-axis SPL.
 - ``directivity_index_b64(frequencies, di)`` — DI vs frequency.
+- ``forward_beam_shape_b64(beam_shape)`` — fitted beam shape + spherical DI.
 - ``impedance_b64(frequencies, real, imaginary)`` — \\|Z\\| line plot.
 - ``save_impedance_plot(output_path, ...)`` — impedance to disk.
 - ``render_all_charts_b64(payload)`` — convenience: returns dict with
@@ -72,6 +73,7 @@ from ._heatmap import (
 from .charts import (
     FrequencyResponseCurve,
     directivity_index_b64,
+    forward_beam_shape_b64,
     frequency_response_b64,
     frequency_response_multi_b64,
     impedance_b64,
@@ -132,6 +134,7 @@ __all__ = [
     "frequency_response_b64",
     "frequency_response_multi_b64",
     "directivity_index_b64",
+    "forward_beam_shape_b64",
     "impedance_b64",
     "save_frequency_response_plot",
     "save_impedance_plot",

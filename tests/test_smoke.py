@@ -87,6 +87,45 @@ def test_directivity_heatmap_b64_with_title_kwarg():
     assert _is_valid_b64_png(b64)
 
 
+def _synthetic_beam_shape():
+    freqs = np.geomspace(200.0, 20000.0, 30)
+    p_values = np.linspace(1.0, 8.0, freqs.size)
+    p_values[[5, 17]] = np.nan
+    residuals = np.linspace(0.0, 20.0, freqs.size)
+    residuals[[8, 21]] = np.nan
+    return {
+        "frequencies": freqs.tolist(),
+        "shape_exponent": [None if np.isnan(value) else float(value) for value in p_values],
+        "fit_residual_percent": [None if np.isnan(value) else float(value) for value in residuals],
+        "spherical_di_db": np.linspace(0.0, 15.0, freqs.size).tolist(),
+    }
+
+
+def test_forward_beam_shape_b64():
+    assert _is_valid_b64_png(hlp.forward_beam_shape_b64(_synthetic_beam_shape()))
+
+
+def test_forward_beam_shape_b64_empty_returns_none():
+    assert hlp.forward_beam_shape_b64({}) is None
+    assert hlp.forward_beam_shape_b64({"frequencies": []}) is None
+
+
+def test_forward_beam_shape_b64_renders_di_only():
+    beam_shape = _synthetic_beam_shape()
+    beam_shape["shape_exponent"] = [None] * len(beam_shape["frequencies"])
+    assert _is_valid_b64_png(hlp.forward_beam_shape_b64(beam_shape))
+
+
+def test_forward_beam_shape_b64_reference_and_theme():
+    beam_shape = _synthetic_beam_shape()
+    assert _is_valid_b64_png(hlp.forward_beam_shape_b64(
+        beam_shape,
+        reference_beam_shape=beam_shape,
+        reference_label="Baseline",
+        theme="granite",
+    ))
+
+
 def test_prepare_polar_line_data_selects_nearest_and_normalizes():
     freqs = np.array([100.0, 200.0, 400.0])
     angles = np.array([0.0, 30.0, 60.0, 90.0])
@@ -309,6 +348,14 @@ def test_render_all_charts_b64():
     assert _is_valid_b64_png(out["directivity_index"])
     assert _is_valid_b64_png(out["impedance"])
     assert _is_valid_b64_png(out["directivity_map"])
+
+
+def test_render_all_charts_b64_beam_shape_wiring():
+    with_beam_shape = hlp.render_all_charts_b64({"beam_shape": _synthetic_beam_shape()})
+    assert _is_valid_b64_png(with_beam_shape["beam_shape"])
+
+    without_beam_shape = hlp.render_all_charts_b64({})
+    assert not without_beam_shape.get("beam_shape")
 
 
 def test_render_all_charts_warns_when_directivity_heatmap_fails():

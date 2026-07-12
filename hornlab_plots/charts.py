@@ -17,7 +17,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import Normalize
+from matplotlib.path import Path as MplPath
 from matplotlib.ticker import FuncFormatter
+from matplotlib.transforms import blended_transform_factory
 
 from ._grid import freq_formatter, log_grid_lines, preferred_frequency_ticks
 from .style import (
@@ -748,6 +751,191 @@ def directivity_index_b64(
     return _fig_to_base64(fig, dpi)
 
 
+def _beam_shape_arrays(beam_shape):
+    """Return aligned beam-shape arrays, or empty arrays for invalid input."""
+    if not isinstance(beam_shape, dict):
+        return tuple(np.array([], dtype=float) for _ in range(4))
+
+    def as_float(values):
+        if values is None:
+            return np.array([], dtype=float)
+        try:
+            return np.asarray(
+                [value if value is not None else np.nan for value in values],
+                dtype=float,
+            )
+        except (TypeError, ValueError):
+            return np.array([], dtype=float)
+
+    freqs = as_float(beam_shape.get("frequencies"))
+    if freqs.size == 0:
+        return tuple(np.array([], dtype=float) for _ in range(4))
+
+    def aligned(key):
+        values = as_float(beam_shape.get(key))
+        result = np.full(freqs.size, np.nan, dtype=float)
+        result[:min(result.size, values.size)] = values[:result.size]
+        return result
+
+    return (
+        freqs,
+        aligned("shape_exponent"),
+        aligned("fit_residual_percent"),
+        aligned("spherical_di_db"),
+    )
+
+
+def forward_beam_shape_b64(
+    beam_shape,
+    dpi=150,
+    *,
+    theme=None,
+    colors=None,
+    line_colors=None,
+    reference_beam_shape=None,
+    reference_label=None,
+):
+    """Render fitted forward-beam shape and spherical DI vs frequency.
+
+    ``beam_shape`` is a dict containing aligned ``frequencies``,
+    ``shape_exponent``, ``fit_residual_percent``, and ``spherical_di_db``
+    series. Invalid samples are omitted while preserving gaps in line traces.
+    """
+    freqs, p_values, residuals, di_values = _beam_shape_arrays(beam_shape)
+    if freqs.size == 0:
+        return None
+
+    valid_freqs = np.isfinite(freqs) & (freqs > 0.0)
+    valid_p = valid_freqs & np.isfinite(p_values)
+    valid_di = valid_freqs & np.isfinite(di_values)
+    if not np.any(valid_p) and not np.any(valid_di):
+        return None
+
+    theme_obj = apply_theme_overrides(theme, colors=colors, line_colors=line_colors)
+    line_palette = tuple(line_colors) if line_colors is not None else None
+    di_color = (
+        line_palette[1 % len(line_palette)]
+        if line_palette
+        else theme_obj.response_colors["mf"]
+    )
+    neutral_color = theme_obj.grid_color
+    reference_color = theme_reference_color(theme_obj)
+
+    ref_freqs, ref_p, _, ref_di = _beam_shape_arrays(reference_beam_shape)
+    ref_valid_freqs = np.isfinite(ref_freqs) & (ref_freqs > 0.0)
+    ref_valid_p = ref_valid_freqs & np.isfinite(ref_p)
+    ref_valid_di = ref_valid_freqs & np.isfinite(ref_di)
+
+    with theme_rc_context(theme_obj):
+        fig, ax = plt.subplots(1, 1, figsize=(10, 4))
+        fig.patch.set_facecolor(theme_obj.figure_bg)
+        ax_di = ax.twinx()
+        ax.set_facecolor(theme_obj.axes_bg)
+        ax_di.set_facecolor(theme_obj.axes_bg)
+
+        all_freqs = []
+        legend_handles = []
+        if np.any(valid_p):
+            p_line_values = np.where(valid_p, p_values, np.nan)
+            p_line = ax.semilogx(
+                freqs, p_line_values, color=neutral_color, linewidth=1.0,
+                zorder=2, label="Superellipse p",
+            )[0]
+            legend_handles.append(p_line)
+            all_freqs.extend(freqs[valid_p].tolist())
+
+            cmap = plt.get_cmap("RdYlGn_r").copy()
+            cmap.set_bad(theme_obj.tick_color, alpha=0.65)
+            point_residuals = np.ma.masked_invalid(residuals[valid_p])
+            scatter = ax.scatter(
+                freqs[valid_p], p_values[valid_p], c=point_residuals,
+                cmap=cmap, norm=Normalize(vmin=0, vmax=15), s=28,
+                edgecolors=theme_obj.axes_bg, linewidths=0.45, zorder=3,
+            )
+            colorbar = fig.colorbar(scatter, ax=ax, pad=0.025)
+            colorbar.set_label("Fit residual (%)", color=theme_obj.text_color)
+            colorbar.ax.tick_params(colors=theme_obj.tick_color, labelsize=8)
+            colorbar.outline.set_edgecolor(theme_obj.spine_color)
+
+        if np.any(valid_di):
+            di_line_values = np.where(valid_di, di_values, np.nan)
+            di_line = ax_di.semilogx(
+                freqs, di_line_values, color=di_color, linewidth=1.5,
+                linestyle="--", zorder=3, label="Spherical DI",
+            )[0]
+            legend_handles.append(di_line)
+            all_freqs.extend(freqs[valid_di].tolist())
+
+        reference_plotted = False
+        ref_name = str(reference_label or "Reference")
+        if np.any(ref_valid_p):
+            ref_line = ax.semilogx(
+                ref_freqs, np.where(ref_valid_p, ref_p, np.nan),
+                color=reference_color, linewidth=1.2, linestyle="--", alpha=0.65,
+                label=f"Superellipse p ({ref_name})",
+            )[0]
+            legend_handles.append(ref_line)
+            all_freqs.extend(ref_freqs[ref_valid_p].tolist())
+            reference_plotted = True
+        if np.any(ref_valid_di):
+            ref_di_line = ax_di.semilogx(
+                ref_freqs, np.where(ref_valid_di, ref_di, np.nan),
+                color=reference_color, linewidth=1.2, linestyle=":", alpha=0.65,
+                label=f"Spherical DI ({ref_name})",
+            )[0]
+            legend_handles.append(ref_di_line)
+            all_freqs.extend(ref_freqs[ref_valid_di].tolist())
+            reference_plotted = True
+
+        if reference_plotted:
+            for handle in legend_handles:
+                if handle.get_label() == "Superellipse p":
+                    handle.set_label("Current Superellipse p")
+                elif handle.get_label() == "Spherical DI":
+                    handle.set_label("Current Spherical DI")
+            ax.legend(
+                handles=legend_handles, loc="upper left", fontsize=8,
+                facecolor=theme_obj.axes_bg, edgecolor=theme_obj.spine_color,
+                labelcolor=theme_obj.text_color,
+            )
+
+        _setup_dark_axes(
+            ax, "Frequency (Hz)", "Superellipse p", "Forward Beam Shape",
+            theme=theme_obj,
+        )
+        ax.set_ylim(0.7, 8.3)
+        ax.set_yticks([1, 2, 4, 8])
+        ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
+
+        ax_di.set_ylabel("Spherical DI (dB)", color=theme_obj.text_color, fontsize=11)
+        ax_di.tick_params(colors=theme_obj.tick_color, labelsize=9)
+        ax_di.spines["right"].set_color(theme_obj.spine_color)
+
+        rounded_square = MplPath(
+            [(-0.6, -1.0), (0.6, -1.0), (1.0, -0.6), (1.0, 0.6),
+             (0.6, 1.0), (-0.6, 1.0), (-1.0, 0.6), (-1.0, -0.6),
+             (-0.6, -1.0)],
+            [MplPath.MOVETO] + [MplPath.LINETO] * 7 + [MplPath.CLOSEPOLY],
+        )
+        glyph_transform = blended_transform_factory(ax.transAxes, ax.transData)
+        for y_value, marker in ((1, "D"), (2, "o"), (4, rounded_square), (8, "s")):
+            ax.scatter(
+                [-0.045], [y_value], marker=marker, s=34,
+                color=theme_obj.tick_color, alpha=0.75, clip_on=False,
+                transform=glyph_transform, zorder=4,
+            )
+
+        freq_min, freq_max = min(all_freqs), max(all_freqs)
+        if freq_min == freq_max:
+            freq_min /= 1.05
+            freq_max *= 1.05
+        ax.set_xlim(freq_min, freq_max)
+        _add_log_grid(ax, freq_min, freq_max, detailed=True, theme=theme_obj)
+        ax.tick_params(axis="x", labelsize=8)
+        fig.tight_layout(pad=1.5)
+    return _fig_to_base64(fig, dpi)
+
+
 def impedance_b64(
     frequencies,
     real,
@@ -1012,7 +1200,8 @@ def render_all_charts_b64(
     """Render all charts from a combined results payload.
 
     Returns a dict with keys ``frequency_response``, ``directivity_index``,
-    ``impedance``, ``directivity_map`` — each a base64 PNG or None. Heatmap
+    ``impedance``, ``directivity_map``, and, when supplied, ``beam_shape`` —
+    each a base64 PNG or None. Heatmap
     failures leave ``directivity_map`` as None and emit a ``RuntimeWarning``
     so the other independent charts can still be returned. Reference data in
     ``payload`` applies only to the line charts; ``directivity_map`` remains
@@ -1096,6 +1285,18 @@ def render_all_charts_b64(
         normalization=imp_normalization,
         reference_normalization=reference.get("impedance_normalization"),
     ) if _nonempty(imp_real) else None
+
+    beam_shape = payload.get("beam_shape")
+    if isinstance(beam_shape, dict) and beam_shape:
+        charts["beam_shape"] = forward_beam_shape_b64(
+            beam_shape,
+            dpi,
+            theme=theme,
+            colors=colors,
+            line_colors=line_colors,
+            reference_beam_shape=reference.get("beam_shape"),
+            reference_label=reference_label,
+        )
 
     dir_b64 = None
     if _nonempty(directivity) and _nonempty(freqs):
