@@ -34,7 +34,7 @@ from types import MappingProxyType
 from typing import Any, Iterator, Mapping
 
 import matplotlib
-from matplotlib.colors import Colormap, LinearSegmentedColormap
+from matplotlib.colors import Colormap, LinearSegmentedColormap, to_rgb
 
 
 # Heatmap scale + smoothing defaults --------------------------------------
@@ -679,6 +679,19 @@ def theme_grid_kwargs(theme: Theme | str | None = None, *, linewidth: float) -> 
     return kwargs
 
 
+def theme_reference_color(theme: Theme | str | None = None) -> str:
+    """Return a high-contrast reference-overlay color for a theme."""
+    theme_obj = resolve_theme(theme)
+    for background in (theme_obj.figure_bg, theme_obj.axes_bg):
+        try:
+            red, green, blue = to_rgb(background)
+        except (TypeError, ValueError):
+            continue
+        luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        return "#F1F5F9" if luminance < 0.5 else "#334155"
+    return "#F1F5F9"
+
+
 _COLOR_FIELD_ALIASES = {
     "figure_bg": "figure_bg",
     "background": "figure_bg",
@@ -792,6 +805,7 @@ __all__ = [
     "apply_theme_overrides",
     "theme_rc_context",
     "theme_grid_kwargs",
+    "theme_reference_color",
     "MIN_DB",
     "MAX_DB",
     "FRACTIONAL_OCTAVE",

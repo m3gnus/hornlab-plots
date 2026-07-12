@@ -39,6 +39,7 @@ from .style import (
     MIN_DB,
     apply_theme_overrides,
     theme_grid_kwargs,
+    theme_reference_color,
     theme_rc_context,
 )
 
@@ -304,6 +305,36 @@ def _set_contour_path_effects(contour_set, path_effects):
         collection.set_path_effects(path_effects)
 
 
+def _overlay_reference_contour(ax, plane, *, reference_level, color):
+    """Draw one prepared reference plane's iso-contour when it crosses the level."""
+    values = plane["values"]
+    finite_values = values[np.isfinite(values)]
+    if (
+        len(plane["freqs"]) < 2
+        or len(plane["angles"]) < 2
+        or finite_values.size == 0
+        or reference_level <= np.min(finite_values)
+        or reference_level >= np.max(finite_values)
+    ):
+        return False
+
+    X, Y = np.meshgrid(plane["freqs"], plane["angles"])
+    try:
+        ax.contour(
+            X,
+            Y,
+            values,
+            levels=[reference_level],
+            colors=color,
+            linestyles="--",
+            linewidths=1.2,
+            zorder=4,
+        )
+    except Exception:
+        return False
+    return True
+
+
 def render_single_heatmap(
     ax, freqs, angles, values, title, reference_level=-6.0,
     mesh_valid_hz=None, mesh_valid_radiating_hz=None,
@@ -529,7 +560,7 @@ def _build_planes_from_legacy(frequencies, directivity):
 
 def _build_figure_from_planes(
     planes, reference_level=-6.0, mesh_valid_hz=None, mesh_valid_radiating_hz=None,
-    *, theme=None, colors=None
+    *, theme=None, colors=None, reference_planes=None, reference_label=None
 ):
     """Render planes into a matplotlib figure and return it.
 
@@ -539,6 +570,9 @@ def _build_figure_from_planes(
     """
     theme_obj = apply_theme_overrides(theme, colors=colors)
     by_key = {entry["key"]: entry for entry in planes}
+    reference_by_key = {
+        entry["key"]: entry for entry in (reference_planes or [])
+    }
     has_only_hv = set(by_key.keys()) == {"horizontal", "vertical"}
     symmetric = has_only_hv and check_symmetry(
         by_key["horizontal"]["values_raw"],
@@ -555,6 +589,7 @@ def _build_figure_from_planes(
                 by_key["horizontal"]["angles"],
                 by_key["horizontal"]["values"],
             )]
+            dataset_keys = [("horizontal", "vertical")]
         else:
             plane_count = len(planes)
             fig_height = 5 if plane_count == 1 else (4 * plane_count)
@@ -565,9 +600,12 @@ def _build_figure_from_planes(
                 axes = list(np.atleast_1d(axes))
             titles = [_plane_title(entry["key"]) for entry in planes]
             datasets = [(entry["freqs"], entry["angles"], entry["values"]) for entry in planes]
+            dataset_keys = [(entry["key"],) for entry in planes]
 
         fig.patch.set_facecolor(theme_obj.figure_bg)
-        for ax, title, (plot_freqs, plot_angles, plot_values) in zip(axes, titles, datasets):
+        for ax, title, (plot_freqs, plot_angles, plot_values), plane_keys in zip(
+            axes, titles, datasets, dataset_keys
+        ):
             render_single_heatmap(
                 ax,
                 plot_freqs,
@@ -579,6 +617,31 @@ def _build_figure_from_planes(
                 mesh_valid_radiating_hz=mesh_valid_radiating_hz,
                 theme=theme_obj,
             )
+            reference_drawn = False
+            if reference_by_key:
+                reference_color = theme_reference_color(theme_obj)
+                for key in plane_keys:
+                    reference_plane = reference_by_key.get(key)
+                    if reference_plane is not None:
+                        reference_drawn = _overlay_reference_contour(
+                            ax,
+                            reference_plane,
+                            reference_level=reference_level,
+                            color=reference_color,
+                        ) or reference_drawn
+                if reference_drawn and reference_label:
+                    ax.text(
+                        0.015,
+                        0.02,
+                        f"– – ref: {reference_label}",
+                        transform=ax.transAxes,
+                        color=reference_color,
+                        fontsize=7,
+                        alpha=0.8,
+                        ha="left",
+                        va="bottom",
+                        zorder=5,
+                    )
 
         fig.tight_layout(pad=1.5)
         return fig
@@ -592,6 +655,9 @@ def directivity_heatmap_from_legacy_dict(
     *,
     theme=None,
     colors=None,
+    reference_frequencies=None,
+    reference_directivity=None,
+    reference_label=None,
 ):
     """Render directivity heatmap(s) and return base64-encoded PNG (no prefix).
 
@@ -611,8 +677,21 @@ def directivity_heatmap_from_legacy_dict(
     if not planes:
         return None
 
+    reference_planes = None
+    if reference_frequencies is not None and reference_directivity:
+        reference_planes = _build_planes_from_legacy(
+            reference_frequencies,
+            reference_directivity,
+        )
+
     theme_obj = apply_theme_overrides(theme, colors=colors)
-    fig = _build_figure_from_planes(planes, reference_level=reference_level, theme=theme_obj)
+    fig = _build_figure_from_planes(
+        planes,
+        reference_level=reference_level,
+        theme=theme_obj,
+        reference_planes=reference_planes,
+        reference_label=reference_label,
+    )
 
     buf = io.BytesIO()
     fig.savefig(

@@ -24,6 +24,7 @@ from .style import (
     DPI,
     apply_theme_overrides,
     theme_grid_kwargs,
+    theme_reference_color,
     theme_rc_context,
 )
 
@@ -328,6 +329,9 @@ def _build_frequency_response_figure(
     colors=None,
     line_colors=None,
     response_colors=None,
+    reference_frequencies=None,
+    reference_spl=None,
+    reference_label=None,
 ) -> object | None:
     theme_obj = apply_theme_overrides(
         theme,
@@ -341,6 +345,7 @@ def _build_frequency_response_figure(
 
     with theme_rc_context(theme_obj):
         plotted = []
+        primary_lines = []
         fig, ax = plt.subplots(1, 1, figsize=figsize)
         fig.patch.set_facecolor(theme_obj.figure_bg)
 
@@ -358,12 +363,41 @@ def _build_frequency_response_figure(
             freqs = freqs[finite]
             values = values[finite]
             plotted.append((freqs, values))
-            ax.semilogx(
-                freqs,
-                values,
-                label=curve.label,
-                **_response_curve_style(curve, theme=theme_obj),
+            primary_lines.extend(
+                ax.semilogx(
+                    freqs,
+                    values,
+                    label=curve.label,
+                    **_response_curve_style(curve, theme=theme_obj),
+                )
             )
+
+        reference_plotted = False
+        if plotted and _nonempty(reference_frequencies) and _nonempty(reference_spl):
+            ref_freqs = np.asarray(reference_frequencies, dtype=float)
+            ref_values = np.asarray(reference_spl, dtype=float)
+            n = min(ref_freqs.size, ref_values.size)
+            ref_freqs = ref_freqs[:n]
+            ref_values = ref_values[:n]
+            finite = np.isfinite(ref_freqs) & np.isfinite(ref_values) & (ref_freqs > 0)
+            if np.any(finite):
+                ref_freqs = ref_freqs[finite]
+                ref_values = ref_values[finite]
+                plotted.append((ref_freqs, ref_values))
+                ax.semilogx(
+                    ref_freqs,
+                    ref_values,
+                    color=theme_reference_color(theme_obj),
+                    linewidth=1.2,
+                    linestyle="--",
+                    alpha=0.6,
+                    label=str(reference_label or "Reference"),
+                    zorder=3,
+                )
+                reference_plotted = True
+
+        if reference_plotted and len(primary_lines) == 1:
+            primary_lines[0].set_label("Current")
 
         if not plotted:
             plt.close(fig)
@@ -509,6 +543,9 @@ def frequency_response_b64(
     phase_reference_distance_m=None,
     sound_speed_m_per_s=343.0,
     phase_time_convention=None,
+    reference_frequencies=None,
+    reference_spl=None,
+    reference_label=None,
 ):
     """Render on-axis SPL vs frequency and return base64-encoded PNG.
 
@@ -531,6 +568,9 @@ def frequency_response_b64(
         phase_reference_distance_m=phase_reference_distance_m,
         sound_speed_m_per_s=sound_speed_m_per_s if sound_speed_m_per_s is not None else 343.0,
         phase_time_convention=phase_time_convention,
+        reference_frequencies=reference_frequencies,
+        reference_spl=reference_spl,
+        reference_label=reference_label,
     )
 
 
@@ -542,6 +582,9 @@ def directivity_index_b64(
     theme=None,
     colors=None,
     line_colors=None,
+    reference_frequencies=None,
+    reference_di=None,
+    reference_label=None,
 ):
     """Render DI vs frequency, per-plane, and return base64-encoded PNG.
 
@@ -590,6 +633,7 @@ def directivity_index_b64(
         all_vals = []
         all_plotted_freqs = []
         plotted_plane_count = 0
+        primary_lines = {}
         for index, (plane_id, di_vals) in enumerate(planes.items()):
             n_points = min(freqs.size, di_vals.size)
             plane_freqs = freqs[:n_points]
@@ -609,13 +653,13 @@ def directivity_index_b64(
                 else plane_colors.get(plane_id, "#81c784")
             )
             label = plane_labels.get(plane_id, plane_id.capitalize())
-            ax.semilogx(
+            primary_lines[plane_id] = ax.semilogx(
                 plane_freqs,
                 plane_vals,
                 color=color,
                 linewidth=1.5,
                 label=label,
-            )
+            )[0]
             all_vals.extend(plane_vals.tolist())
             all_plotted_freqs.extend(plane_freqs.tolist())
             plotted_plane_count += 1
@@ -624,7 +668,63 @@ def directivity_index_b64(
             plt.close(fig)
             return None
 
-        if plotted_plane_count > 1:
+        reference_plotted = False
+        if _nonempty(reference_frequencies) and _nonempty(reference_di):
+            reference_freqs = np.asarray(reference_frequencies, dtype=float)
+            reference_planes = {}
+            if isinstance(di, dict) and isinstance(reference_di, dict):
+                for plane_id in planes:
+                    vals = reference_di.get(plane_id)
+                    if _nonempty(vals) and any(v is not None for v in vals):
+                        reference_planes[plane_id] = np.asarray(
+                            [v if v is not None else np.nan for v in vals],
+                            dtype=float,
+                        )
+            elif not isinstance(di, dict) and isinstance(
+                reference_di, (list, tuple, np.ndarray)
+            ):
+                vals = np.asarray(
+                    [v if v is not None else np.nan for v in reference_di],
+                    dtype=float,
+                )
+                if vals.size and not np.all(np.isnan(vals)):
+                    reference_planes["horizontal"] = vals
+
+            ref_name = str(reference_label or "Reference")
+            for plane_id, ref_vals in reference_planes.items():
+                n_points = min(reference_freqs.size, ref_vals.size)
+                plane_freqs = reference_freqs[:n_points]
+                plane_vals = ref_vals[:n_points]
+                valid = (
+                    np.isfinite(plane_freqs)
+                    & (plane_freqs > 0.0)
+                    & np.isfinite(plane_vals)
+                )
+                if not np.any(valid):
+                    continue
+                plane_freqs = plane_freqs[valid]
+                plane_vals = plane_vals[valid]
+                plane_label = plane_labels.get(plane_id, plane_id.capitalize())
+                label = f"{ref_name} {plane_label}" if isinstance(di, dict) else ref_name
+                ax.semilogx(
+                    plane_freqs,
+                    plane_vals,
+                    color=theme_reference_color(theme_obj),
+                    linewidth=1.2,
+                    linestyle="--",
+                    alpha=0.6,
+                    label=label,
+                )
+                all_vals.extend(plane_vals.tolist())
+                all_plotted_freqs.extend(plane_freqs.tolist())
+                reference_plotted = True
+
+        if reference_plotted:
+            for plane_id, line in primary_lines.items():
+                plane_label = plane_labels.get(plane_id, plane_id.capitalize())
+                line.set_label(f"Current {plane_label}" if isinstance(di, dict) else "Current")
+
+        if plotted_plane_count > 1 or reference_plotted:
             ax.legend(loc="upper left", fontsize=9, facecolor=theme_obj.axes_bg,
                       edgecolor=theme_obj.spine_color, labelcolor=theme_obj.text_color)
 
@@ -658,11 +758,35 @@ def impedance_b64(
     colors=None,
     line_colors=None,
     ylabel="Z [Pa·s/m]",
+    reference_frequencies=None,
+    reference_real=None,
+    reference_imaginary=None,
+    reference_label=None,
+    normalization=None,
+    reference_normalization=None,
 ):
     """Render acoustic impedance (real + imaginary) and return base64 PNG."""
+    if (
+        _nonempty(reference_frequencies)
+        and _nonempty(reference_real)
+        and normalization != reference_normalization
+    ):
+        warnings.warn(
+            "reference impedance normalization does not match current; skipping overlay",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        reference_frequencies = None
+        reference_real = None
+        reference_imaginary = None
+
     fig = _build_impedance_figure(
         frequencies, real, imaginary, theme=theme, colors=colors,
         line_colors=line_colors, ylabel=ylabel,
+        reference_frequencies=reference_frequencies,
+        reference_real=reference_real,
+        reference_imaginary=reference_imaginary,
+        reference_label=reference_label,
     )
     if fig is None:
         return None
@@ -713,6 +837,10 @@ def _build_impedance_figure(
     line_colors=None,
     title="Acoustic Impedance",
     ylabel="Z [Pa·s/m]",
+    reference_frequencies=None,
+    reference_real=None,
+    reference_imaginary=None,
+    reference_label=None,
 ):
     theme_obj = apply_theme_overrides(theme, colors=colors, line_colors=line_colors)
     line_palette = tuple(line_colors) if line_colors is not None else None
@@ -737,6 +865,29 @@ def _build_impedance_figure(
     freqs, re_vals = freqs[valid], re_vals[valid]
     im_vals = im_vals[valid] if has_imag else np.array([], dtype=float)
 
+    reference_data = None
+    if _nonempty(reference_frequencies) and _nonempty(reference_real):
+        ref_freqs = np.asarray(reference_frequencies, dtype=float)
+        ref_real = np.asarray(reference_real, dtype=float)
+        ref_imag = (
+            np.asarray(reference_imaginary, dtype=float)
+            if _nonempty(reference_imaginary)
+            else np.array([], dtype=float)
+        )
+        ref_n = min(ref_freqs.size, ref_real.size)
+        ref_freqs, ref_real = ref_freqs[:ref_n], ref_real[:ref_n]
+        ref_has_imag = ref_imag.size >= ref_n
+        ref_imag = ref_imag[:ref_n] if ref_has_imag else np.array([], dtype=float)
+        ref_valid = np.isfinite(ref_freqs) & (ref_freqs > 0) & np.isfinite(ref_real)
+        if ref_has_imag:
+            ref_valid &= np.isfinite(ref_imag)
+        if np.any(ref_valid):
+            reference_data = (
+                ref_freqs[ref_valid],
+                ref_real[ref_valid],
+                ref_imag[ref_valid] if ref_has_imag else np.array([], dtype=float),
+            )
+
     with theme_rc_context(theme_obj):
         fig, ax = plt.subplots(1, 1, figsize=(10, 4))
         fig.patch.set_facecolor(theme_obj.figure_bg)
@@ -747,16 +898,56 @@ def _build_impedance_figure(
             if line_palette
             else theme_obj.impedance_colors["imaginary"]
         )
-        ax.semilogx(freqs, re_vals, color=real_color, linewidth=1.5, label="Re(Z)")
+        real_line = ax.semilogx(
+            freqs, re_vals, color=real_color, linewidth=1.5, label="Re(Z)"
+        )[0]
+        imag_line = None
         if len(im_vals) > 0:
-            ax.semilogx(freqs, im_vals, color=imag_color, linewidth=1.5, label="Im(Z)")
+            imag_line = ax.semilogx(
+                freqs, im_vals, color=imag_color, linewidth=1.5, label="Im(Z)"
+            )[0]
+
+        if reference_data is not None:
+            ref_freqs, ref_real, ref_imag = reference_data
+            ref_name = str(reference_label or "Reference")
+            real_line.set_label("Current Re(Z)")
+            if imag_line is not None:
+                imag_line.set_label("Current Im(Z)")
+            reference_color = theme_reference_color(theme_obj)
+            ax.semilogx(
+                ref_freqs,
+                ref_real,
+                color=reference_color,
+                linewidth=1.2,
+                linestyle="--",
+                alpha=0.6,
+                label=f"{ref_name} Re(Z)",
+            )
+            if len(ref_imag) > 0:
+                ax.semilogx(
+                    ref_freqs,
+                    ref_imag,
+                    color=reference_color,
+                    linewidth=1.2,
+                    linestyle="--",
+                    alpha=0.6,
+                    label=f"{ref_name} Im(Z)",
+                )
 
         _setup_dark_axes(ax, "Frequency [Hz]", ylabel, title, theme=theme_obj)
         ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
-        ax.set_xlim(freqs[0], freqs[-1])
+        if reference_data is None:
+            ax.set_xlim(freqs[0], freqs[-1])
+        else:
+            ax.set_xlim(min(freqs[0], ref_freqs[0]), max(freqs[-1], ref_freqs[-1]))
 
         all_vals = np.concatenate([re_vals, im_vals]) if len(im_vals) > 0 else re_vals
+        if reference_data is not None:
+            ref_all_vals = (
+                np.concatenate([ref_real, ref_imag]) if len(ref_imag) > 0 else ref_real
+            )
+            all_vals = np.concatenate([all_vals, ref_all_vals])
         z_min, z_max = np.nanmin(all_vals), np.nanmax(all_vals)
         # Auto-scale the y-margin to the data range. A former max(50, ...) floor
         # flattened normalized Z/(rho*c) data (range ~0-4) into a straight line;
@@ -765,7 +956,10 @@ def _build_impedance_figure(
         margin = z_range * 0.1 if z_range > 0 else max(abs(z_max) * 0.1, 1.0)
         ax.set_ylim(z_min - margin, z_max + margin)
 
-        _add_log_grid(ax, freqs[0], freqs[-1], theme=theme_obj)
+        if reference_data is None:
+            _add_log_grid(ax, freqs[0], freqs[-1], theme=theme_obj)
+        else:
+            _add_log_grid(ax, ax.get_xlim()[0], ax.get_xlim()[1], theme=theme_obj)
 
         legend = ax.legend(loc="upper right", fontsize=10,
                            facecolor=theme_obj.axes_bg, edgecolor=theme_obj.spine_color,
@@ -820,7 +1014,10 @@ def render_all_charts_b64(
     Returns a dict with keys ``frequency_response``, ``directivity_index``,
     ``impedance``, ``directivity_map`` — each a base64 PNG or None. Heatmap
     failures leave ``directivity_map`` as None and emit a ``RuntimeWarning``
-    so the other independent charts can still be returned.
+    so the other independent charts can still be returned. Reference data in
+    ``payload`` applies only to the line charts; ``directivity_map`` remains
+    primary-only here because heatmap references use the separate
+    :func:`directivity_heatmap_from_legacy_dict` entry point.
     """
     from ._heatmap import directivity_heatmap_from_legacy_dict
 
@@ -833,7 +1030,22 @@ def render_all_charts_b64(
     imp_real = payload.get("impedance_real", [])
     imp_imag = payload.get("impedance_imaginary", [])
     imp_units = payload.get("impedance_units")
+    imp_normalization = payload.get("impedance_normalization")
     directivity = payload.get("directivity", {})
+
+    reference = payload.get("reference")
+    if not isinstance(reference, dict):
+        reference = {}
+    reference_freqs = reference.get("frequencies", [])
+    reference_di_freqs = reference.get("di_frequencies")
+    reference_di_freqs = (
+        reference_di_freqs if _nonempty(reference_di_freqs) else reference_freqs
+    )
+    reference_imp_freqs = reference.get("impedance_frequencies")
+    reference_imp_freqs = (
+        reference_imp_freqs if _nonempty(reference_imp_freqs) else reference_freqs
+    )
+    reference_label = reference.get("label")
 
     charts = {}
 
@@ -852,6 +1064,9 @@ def render_all_charts_b64(
         phase_reference_distance_m=payload.get("phase_reference_distance_m"),
         sound_speed_m_per_s=payload.get("sound_speed_m_per_s"),
         phase_time_convention=payload.get("phase_time_convention"),
+        reference_frequencies=reference_freqs,
+        reference_spl=reference.get("spl"),
+        reference_label=reference_label,
     ) if _nonempty(spl) else None
     di_input = payload.get("di", [])
     charts["directivity_index"] = directivity_index_b64(
@@ -861,6 +1076,9 @@ def render_all_charts_b64(
         theme=theme,
         colors=colors,
         line_colors=line_colors,
+        reference_frequencies=reference_di_freqs,
+        reference_di=reference.get("di"),
+        reference_label=reference_label,
     ) if _nonempty(di_input) else None
     charts["impedance"] = impedance_b64(
         imp_freqs,
@@ -871,6 +1089,12 @@ def render_all_charts_b64(
         colors=colors,
         line_colors=line_colors,
         ylabel=_impedance_ylabel(imp_units),
+        reference_frequencies=reference_imp_freqs,
+        reference_real=reference.get("impedance_real"),
+        reference_imaginary=reference.get("impedance_imaginary"),
+        reference_label=reference_label,
+        normalization=imp_normalization,
+        reference_normalization=reference.get("impedance_normalization"),
     ) if _nonempty(imp_real) else None
 
     dir_b64 = None
