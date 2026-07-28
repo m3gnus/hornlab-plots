@@ -3,7 +3,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from hornlab_plots.complex_analysis import _patterns_to_complex
+import hornlab_plots.complex_analysis as complex_analysis
+from hornlab_plots.complex_analysis import (
+    _patterns_to_complex,
+    _pressure_at_angle,
+    _propagation_phase,
+    _resample_frequency_onto,
+    _resample_pressure_at_angle,
+)
 
 
 def test_complex_patterns_are_reindexed_by_angle_value():
@@ -57,3 +64,103 @@ def test_complex_patterns_keep_malformed_points_as_nan():
     assert np.isnan(pressure[1, 0])
     assert pressure[1, 1] == 20.0 + 2.0j
     assert np.isnan(pressure[1, 2])
+
+
+def test_frequency_resampling_preserves_log_magnitude_and_residual_phase():
+    frequencies = np.geomspace(100.0, 10000.0, 5)
+    targets = np.geomspace(150.0, 8000.0, 9)
+    log_frequencies = np.log(frequencies)
+    log_targets = np.log(targets)
+    distance_m = 2.0
+    magnitude_db = np.column_stack(
+        (
+            3.0 + 2.0 * log_frequencies,
+            -4.0 + 0.5 * log_frequencies,
+        )
+    )
+    residual_phase = np.column_stack(
+        (
+            -0.2 + 0.03 * log_frequencies,
+            0.4 - 0.02 * log_frequencies,
+        )
+    )
+    pressure = 10.0 ** (magnitude_db / 20.0) * np.exp(
+        1j
+        * (
+            residual_phase
+            + _propagation_phase(frequencies, distance_m)[:, None]
+        )
+    )
+
+    result = _resample_frequency_onto(
+        targets, frequencies, pressure, distance_m
+    )
+
+    expected_magnitude_db = np.column_stack(
+        (
+            3.0 + 2.0 * log_targets,
+            -4.0 + 0.5 * log_targets,
+        )
+    )
+    expected_residual_phase = np.column_stack(
+        (
+            -0.2 + 0.03 * log_targets,
+            0.4 - 0.02 * log_targets,
+        )
+    )
+    expected = 10.0 ** (expected_magnitude_db / 20.0) * np.exp(
+        1j
+        * (
+            expected_residual_phase
+            + _propagation_phase(targets, distance_m)[:, None]
+        )
+    )
+    np.testing.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
+
+
+def test_exact_angle_resampling_skips_unused_pressure_columns(monkeypatch):
+    frequencies = np.array([100.0, 200.0, 400.0])
+    theta = np.array([-10.0, 0.0, 10.0])
+    pressure = np.arange(9, dtype=float).reshape(3, 3).astype(complex)
+    seen_shapes = []
+
+    def record_resample(freqs_target, freqs_src, selected, distance_m):
+        seen_shapes.append(selected.shape)
+        np.testing.assert_array_equal(freqs_target, frequencies)
+        np.testing.assert_array_equal(freqs_src, frequencies)
+        assert distance_m == 2.0
+        return selected
+
+    monkeypatch.setattr(
+        complex_analysis, "_resample_frequency_onto", record_resample
+    )
+
+    result = _resample_pressure_at_angle(
+        frequencies, frequencies, pressure, theta, 2.0, 0.0
+    )
+
+    assert seen_shapes == [(3, 1)]
+    np.testing.assert_array_equal(result, pressure[:, 1])
+
+
+def test_inexact_angle_resampling_keeps_frequency_then_angle_order():
+    frequencies = np.geomspace(100.0, 1000.0, 4)
+    targets = np.geomspace(125.0, 800.0, 7)
+    theta = np.array([-10.0, 10.0])
+    pressure = np.column_stack(
+        (
+            np.exp(1j * frequencies / 1000.0),
+            2.0 * np.exp(1j * frequencies / 1200.0),
+        )
+    )
+
+    expected = _pressure_at_angle(
+        _resample_frequency_onto(targets, frequencies, pressure, 2.0),
+        theta,
+        0.0,
+    )
+    result = _resample_pressure_at_angle(
+        targets, frequencies, pressure, theta, 2.0, 0.0
+    )
+
+    np.testing.assert_array_equal(result, expected)

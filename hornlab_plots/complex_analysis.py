@@ -728,11 +728,15 @@ def _resample_frequency_onto(
     distance_m: float,
 ) -> np.ndarray:
     log_t = np.log(freqs_target)
+    finite_freqs = np.isfinite(freqs_src)
+    finite_pressure = _finite_complex(p_src)
+    propagation_src = _propagation_phase(freqs_src, distance_m)
+    propagation_target = _propagation_phase(freqs_target, distance_m)
     n_theta = p_src.shape[1]
     out = np.full((len(freqs_target), n_theta), complex(np.nan, np.nan), dtype=complex)
     for ai in range(n_theta):
         col = p_src[:, ai]
-        valid = _finite_complex(col) & np.isfinite(freqs_src)
+        valid = finite_pressure[:, ai] & finite_freqs
         if np.sum(valid) < 2:
             continue
         f_valid = freqs_src[valid]
@@ -741,14 +745,14 @@ def _resample_frequency_onto(
             continue
         log_s = np.log(f_valid)
         mag_db = 20 * np.log10(np.abs(col[valid]) + 1e-30)
-        phase = _unwrapped_phase(
-            col[valid], f_valid, distance_m, readd_propagation=False
+        phase_residual = np.unwrap(
+            np.angle(col[valid] * np.exp(-1j * propagation_src[valid]))
         )
         mag = np.interp(log_t[target_mask], log_s, mag_db)
-        phase_residual = np.interp(log_t[target_mask], log_s, phase)
-        phase_total = phase_residual + _propagation_phase(
-            freqs_target[target_mask], distance_m
+        phase_residual = np.interp(
+            log_t[target_mask], log_s, phase_residual
         )
+        phase_total = phase_residual + propagation_target[target_mask]
         out[target_mask, ai] = 10.0 ** (mag / 20.0) * np.exp(1j * phase_total)
     return out
 
@@ -772,6 +776,32 @@ def _pressure_at_angle(p: np.ndarray, theta_src: np.ndarray, angle_deg: float) -
         ph = np.interp(angle_deg, theta_valid, phase)
         out[fi] = 10.0 ** (mag / 20.0) * np.exp(1j * ph)
     return out
+
+
+def _resample_pressure_at_angle(
+    freqs_target: np.ndarray,
+    freqs_src: np.ndarray,
+    p_src: np.ndarray,
+    theta_src: np.ndarray,
+    distance_m: float,
+    angle_deg: float,
+) -> np.ndarray:
+    """Resample one angular trace without eagerly resampling unused traces."""
+    theta_src = np.asarray(theta_src, dtype=float)
+    exact = np.where(np.isclose(theta_src, angle_deg, atol=1e-9))[0]
+    if exact.size:
+        angle_index = int(exact[0])
+        return _resample_frequency_onto(
+            freqs_target,
+            freqs_src,
+            p_src[:, angle_index:angle_index + 1],
+            distance_m,
+        )[:, 0]
+    return _pressure_at_angle(
+        _resample_frequency_onto(freqs_target, freqs_src, p_src, distance_m),
+        theta_src,
+        angle_deg,
+    )
 
 
 def _common_theta_grid(a: ComplexDirectivity, b: ComplexDirectivity) -> np.ndarray:
@@ -822,10 +852,12 @@ def plot_pair_coherent_vs_power_sum(a: ComplexDirectivity,
     Difference shows constructive/destructive interference across the overlap.
     """
     f_common = _common_frequency_grid(a, b)
-    a_h = _resample_frequency_onto(f_common, a.freqs, a.p_h, a.distance_m)
-    b_h = _resample_frequency_onto(f_common, b.freqs, b.p_h, b.distance_m)
-    a_on = _pressure_at_angle(a_h, a.theta, 0.0)
-    b_on = _pressure_at_angle(b_h, b.theta, 0.0)
+    a_on = _resample_pressure_at_angle(
+        f_common, a.freqs, a.p_h, a.theta, a.distance_m, 0.0
+    )
+    b_on = _resample_pressure_at_angle(
+        f_common, b.freqs, b.p_h, b.theta, b.distance_m, 0.0
+    )
     valid = _finite_complex(a_on) & _finite_complex(b_on)
     if np.sum(valid) < 2:
         raise RuntimeError("pair coherent plot has fewer than two valid overlapping samples")
