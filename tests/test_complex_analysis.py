@@ -182,3 +182,54 @@ def test_scalar_and_grid_angle_interpolation_match():
     np.testing.assert_array_equal(scalar, grid)
     np.testing.assert_allclose(scalar[0], np.sqrt(2.0) * (1.0 + 1.0j))
     assert np.isnan(scalar[1])
+
+
+def test_impulse_response_is_invariant_to_frequency_order(monkeypatch):
+    captured = []
+
+    def capture_response(fig, out, suptitle=""):
+        response = next(
+            line for line in fig.axes[0].get_lines()
+            if line.get_label() == "0°"
+        )
+        captured.append((response.get_xdata(), response.get_ydata()))
+        complex_analysis.plt.close(fig)
+        return out
+
+    monkeypatch.setattr(complex_analysis, "_finish_fig", capture_response)
+
+    frequencies = np.array([100.0, 200.0, 400.0, 800.0])
+    residual_phase = 0.2 * np.log(frequencies)
+    pressure = (
+        np.linspace(1.0, 2.0, len(frequencies))
+        * np.exp(
+            1j
+            * (
+                residual_phase
+                + _propagation_phase(frequencies, 2.0)
+            )
+        )
+    )[:, None]
+    sorted_source = complex_analysis.ComplexDirectivity(
+        frequencies,
+        np.array([0.0]),
+        pressure,
+        None,
+    )
+    complex_analysis.plot_impulse_response(
+        sorted_source, "sorted.png", angles_deg=(0.0,)
+    )
+
+    order = np.array([2, 0, 3, 1])
+    permuted_source = complex_analysis.ComplexDirectivity(
+        frequencies[order],
+        np.array([0.0]),
+        pressure[order],
+        None,
+    )
+    complex_analysis.plot_impulse_response(
+        permuted_source, "permuted.png", angles_deg=(0.0,)
+    )
+
+    np.testing.assert_array_equal(captured[0][0], captured[1][0])
+    np.testing.assert_allclose(captured[0][1], captured[1][1])

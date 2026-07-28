@@ -364,7 +364,11 @@ def plot_impulse_response(d: ComplexDirectivity, out: Path,
     extension (so the IFFT is real), and renders the resulting impulse
     response. Useful for spotting throat ringing and mouth reflections.
     """
-    finite_freqs = d.freqs[np.isfinite(d.freqs)]
+    finite_freq_indices = np.flatnonzero(np.isfinite(d.freqs))
+    frequency_order = finite_freq_indices[
+        np.argsort(d.freqs[finite_freq_indices], kind="stable")
+    ]
+    finite_freqs = d.freqs[frequency_order]
     f_min = float(finite_freqs[0])
     f_max = float(finite_freqs[-1])
     df = max(f_min / 4.0, 25.0)
@@ -374,7 +378,8 @@ def plot_impulse_response(d: ComplexDirectivity, out: Path,
         n *= 2
     n = max(n, 256)
     f_uniform = np.arange(n // 2 + 1) * (fs / n)
-    t = np.arange(n) / fs
+    t_ms = np.arange(n) / fs * 1000.0
+    time_mask = t_ms <= window_ms
 
     fig, axes = plt.subplots(1, 2 if d.p_v is not None else 1,
                              figsize=(12, 5), sharey=True)
@@ -386,11 +391,12 @@ def plot_impulse_response(d: ComplexDirectivity, out: Path,
     for ax, (p, name) in zip(axes, sources):
         for i, a in enumerate(angles_deg):
             ai = int(np.argmin(np.abs(d.theta - a)))
-            valid = _finite_complex(p[:, ai]) & np.isfinite(d.freqs)
+            p_sorted = p[frequency_order, ai]
+            valid = _finite_complex(p_sorted)
             if np.sum(valid) < 2:
                 continue
-            f_valid = d.freqs[valid]
-            p_valid = p[valid, ai]
+            f_valid = finite_freqs[valid]
+            p_valid = p_sorted[valid]
             mag_db = 20 * np.log10(np.abs(p_valid) + 1e-30)
             phase = _unwrapped_phase(
                 p_valid, f_valid, d.distance_m, readd_propagation=False
@@ -412,9 +418,7 @@ def plot_impulse_response(d: ComplexDirectivity, out: Path,
             )
             ir = np.fft.irfft(spectrum_half, n=n) * n
             ir = ir / max(np.max(np.abs(ir)), 1e-30)
-            t_ms = t * 1000.0
-            mask = t_ms <= window_ms
-            ax.plot(t_ms[mask], ir[mask], lw=1.2,
+            ax.plot(t_ms[time_mask], ir[time_mask], lw=1.2,
                     color=_line_color(i),
                     label=f"{a:.0f}°")
         ax.axhline(0, color=_theme().tick_color, lw=0.5, alpha=0.4)
