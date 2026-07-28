@@ -37,7 +37,8 @@ def prepare_polar_line_data(
 
     ``values`` is shaped ``(n_freq, n_angle)`` and may be complex pressure or
     already-dB data. Each requested target frequency resolves to the nearest
-    available frequency in ``frequencies_hz``.
+    available frequency in ``frequencies_hz``. Coordinate arrays and target
+    frequencies must be finite, non-empty 1D arrays.
     """
     freqs = np.asarray(frequencies_hz, dtype=float)
     angles = np.asarray(angles_deg, dtype=float)
@@ -46,13 +47,27 @@ def prepare_polar_line_data(
 
     if freqs.ndim != 1 or angles.ndim != 1:
         raise ValueError("frequencies_hz and angles_deg must be 1D arrays")
+    if targets.ndim != 1:
+        raise ValueError("target_frequencies_hz must be a 1D array")
     if db.shape != (freqs.size, angles.size):
         raise ValueError(
             "values must have shape (n_freq, n_angle); "
             f"got {db.shape}, expected {(freqs.size, angles.size)}"
         )
+    if freqs.size == 0 or angles.size == 0:
+        raise ValueError("frequencies_hz and angles_deg must not be empty")
     if targets.size == 0:
         raise ValueError("target_frequencies_hz must contain at least one frequency")
+    if not np.all(np.isfinite(freqs)):
+        raise ValueError("frequencies_hz must contain only finite values")
+    if not np.all(np.isfinite(angles)):
+        raise ValueError("angles_deg must contain only finite values")
+    if not np.all(np.isfinite(targets)):
+        raise ValueError("target_frequencies_hz must contain only finite values")
+
+    reference_angle = float(reference_angle_deg)
+    if not np.isfinite(reference_angle):
+        raise ValueError("reference_angle_deg must be finite")
 
     angle_mask = np.ones(angles.shape, dtype=bool)
     if angle_min_deg is not None:
@@ -63,7 +78,7 @@ def prepare_polar_line_data(
         raise ValueError("angle range contains no samples")
 
     selected_angles = angles[angle_mask]
-    ref_idx = int(np.argmin(np.abs(angles - float(reference_angle_deg))))
+    ref_idx = int(np.argmin(np.abs(angles - reference_angle)))
     rows = []
     selected_freqs = []
     for target in targets:

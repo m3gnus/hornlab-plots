@@ -148,6 +148,40 @@ def test_prepare_polar_line_data_selects_nearest_and_normalizes():
     np.testing.assert_allclose(rows, [[0.0, -4.0, -10.0], [0.0, -5.0, -13.0]])
 
 
+@pytest.mark.parametrize(
+    ("frequencies", "angles", "values", "targets", "match"),
+    [
+        ([], [0.0, 30.0], np.empty((0, 2)), [100.0], "must not be empty"),
+        ([100.0], [], np.empty((1, 0)), [100.0], "must not be empty"),
+        ([100.0, np.nan], [0.0], np.zeros((2, 1)), [100.0], "frequencies_hz.*finite"),
+        ([100.0], [0.0, np.nan], np.zeros((1, 2)), [100.0], "angles_deg.*finite"),
+        ([100.0], [0.0], np.zeros((1, 1)), [np.nan], "target_frequencies_hz.*finite"),
+        ([100.0], [0.0], np.zeros((1, 1)), 100.0, "target_frequencies_hz.*1D"),
+        ([100.0], [0.0], np.zeros((1, 1)), [[100.0]], "target_frequencies_hz.*1D"),
+    ],
+)
+def test_prepare_polar_line_data_rejects_invalid_coordinates(
+    frequencies,
+    angles,
+    values,
+    targets,
+    match,
+):
+    with pytest.raises(ValueError, match=match):
+        hlp.prepare_polar_line_data(frequencies, angles, values, targets)
+
+
+def test_prepare_polar_line_data_rejects_nonfinite_reference_angle():
+    with pytest.raises(ValueError, match="reference_angle_deg must be finite"):
+        hlp.prepare_polar_line_data(
+            [100.0],
+            [0.0],
+            [[0.0]],
+            [100.0],
+            reference_angle_deg=np.inf,
+        )
+
+
 def test_polar_line_b64_accepts_complex_pressure():
     freqs = np.array([100.0, 200.0, 400.0])
     angles = np.linspace(0.0, 90.0, 7)
