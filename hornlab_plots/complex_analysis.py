@@ -46,19 +46,15 @@ from matplotlib.ticker import FuncFormatter
 import numpy as np
 
 try:
+    from ._grid import freq_formatter
     from .style import apply_theme_overrides, theme_grid_kwargs
 except ImportError:  # pragma: no cover - direct ``python complex_analysis.py`` use.
+    from hornlab_plots._grid import freq_formatter
     from hornlab_plots.style import apply_theme_overrides, theme_grid_kwargs
 
 _trapz = getattr(np, "trapezoid", None) or np.trapz
 
 C_AIR = 343.0
-
-
-def _freq_fmt(x, pos):
-    if x >= 1000:
-        return f"{int(x / 1000)}k" if x % 1000 == 0 else f"{x / 1000:.1f}k"
-    return f"{int(x)}"
 
 
 def _theme():
@@ -306,7 +302,7 @@ def _band_taper(n: int) -> np.ndarray:
 
 def _log_axis(ax: plt.Axes) -> None:
     ax.set_xscale("log")
-    ax.xaxis.set_major_formatter(FuncFormatter(_freq_fmt))
+    ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
 
 # ---------------------------------------------------------------------------
@@ -491,8 +487,7 @@ def plot_phase_polar(d: ComplexDirectivity, out: Path,
         ax.set_theta_direction(-1)
         ax.set_thetalim(-np.pi, np.pi)
         freq_hz = d.freqs[idx]
-        freq_label = f"{int(freq_hz / 1000)}k" if freq_hz >= 1000 and freq_hz % 1000 == 0 \
-            else f"{freq_hz / 1000:.1f}k" if freq_hz >= 1000 else f"{freq_hz:.0f}"
+        freq_label = freq_formatter(freq_hz, None) if freq_hz >= 1000 else f"{freq_hz:.0f}"
         ax.set_title(f"{freq_label} Hz", color=theme_obj.text_color, fontsize=11,
                      fontweight="bold", pad=12)
         ax.tick_params(colors=theme_obj.tick_color, labelsize=7)

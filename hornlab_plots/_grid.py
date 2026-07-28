@@ -15,7 +15,7 @@ def log_grid_lines(freq_min, freq_max):
             freq = mantissa * (10 ** decade)
             if freq_min <= freq <= freq_max:
                 lines.append(freq)
-    return sorted(set(lines))
+    return lines
 
 
 def preferred_frequency_ticks(freq_min, freq_max):
@@ -57,10 +57,9 @@ def _linear_tick_range(freq_min, freq_max, domain_min, domain_max, step):
 
 
 def contains_frequency(freqs, target):
-    for freq in freqs:
-        if np.isclose(freq, target, rtol=1e-6, atol=1e-6):
-            return True
-    return False
+    return any(
+        np.isclose(freq, target, rtol=1e-6, atol=1e-6) for freq in freqs
+    )
 
 
 def freq_formatter(x, pos):
