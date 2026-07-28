@@ -95,6 +95,27 @@ def test_legacy_directivity_duplicate_angles_are_rejected():
         )
 
 
+def test_directivity_planes_with_different_frequency_grids_do_not_collapse():
+    import matplotlib.pyplot as plt
+    from hornlab_plots._heatmap import _build_figure_from_planes, _build_planes_from_legacy
+
+    pattern = [[-10.0, -1.0], [0.0, 0.0], [10.0, -1.0]]
+    planes = _build_planes_from_legacy(
+        [100.0, 200.0, 400.0],
+        {
+            "horizontal": [pattern, pattern, []],
+            "vertical": [[], pattern, pattern],
+        },
+    )
+
+    fig = _build_figure_from_planes(planes)
+    try:
+        titles = [ax.get_title() for ax in fig.axes if ax.get_title()]
+        assert titles == ["H Normalized Directivity", "V Normalized Directivity"]
+    finally:
+        plt.close(fig)
+
+
 def test_line_chart_renderers_return_png():
     freqs = np.geomspace(100.0, 20000.0, 16).tolist()
     spl = (100.0 + 3.0 * np.sin(np.log10(freqs))).tolist()

@@ -574,9 +574,9 @@ def _build_figure_from_planes(
         entry["key"]: entry for entry in (reference_planes or [])
     }
     has_only_hv = set(by_key.keys()) == {"horizontal", "vertical"}
-    symmetric = has_only_hv and check_symmetry(
-        by_key["horizontal"]["values_raw"],
-        by_key["vertical"]["values_raw"],
+    symmetric = has_only_hv and _planes_are_symmetric(
+        by_key["horizontal"],
+        by_key["vertical"],
     )
 
     with theme_rc_context(theme_obj):
@@ -645,6 +645,15 @@ def _build_figure_from_planes(
 
         fig.tight_layout(pad=1.5)
         return fig
+
+
+def _planes_are_symmetric(horizontal, vertical):
+    """Return whether H and V share coordinates and effectively equal values."""
+    return (
+        np.array_equal(horizontal["angles"], vertical["angles"])
+        and np.array_equal(horizontal["freqs"], vertical["freqs"])
+        and check_symmetry(horizontal["values_raw"], vertical["values_raw"])
+    )
 
 
 def directivity_heatmap_from_legacy_dict(
