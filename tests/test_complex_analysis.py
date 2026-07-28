@@ -10,6 +10,7 @@ from hornlab_plots.complex_analysis import (
     _propagation_phase,
     _resample_frequency_onto,
     _resample_pressure_at_angle,
+    _resample_theta_onto,
 )
 
 
@@ -164,3 +165,20 @@ def test_inexact_angle_resampling_keeps_frequency_then_angle_order():
     )
 
     np.testing.assert_array_equal(result, expected)
+
+
+def test_scalar_and_grid_angle_interpolation_match():
+    theta = np.array([-10.0, 10.0])
+    pressure = np.array(
+        [
+            [1.0 + 0.0j, 0.0 + 4.0j],
+            [complex(np.nan, np.nan), 2.0 + 0.0j],
+        ]
+    )
+
+    scalar = _pressure_at_angle(pressure, theta, 0.0)
+    grid = _resample_theta_onto(pressure, theta, np.array([0.0]))[:, 0]
+
+    np.testing.assert_array_equal(scalar, grid)
+    np.testing.assert_allclose(scalar[0], np.sqrt(2.0) * (1.0 + 1.0j))
+    assert np.isnan(scalar[1])

@@ -757,25 +757,20 @@ def _resample_frequency_onto(
     return out
 
 
+def _matching_angle_index(theta_src: np.ndarray, angle_deg: float) -> int | None:
+    theta_src = np.asarray(theta_src, dtype=float)
+    exact = np.where(np.isclose(theta_src, angle_deg, atol=1e-9))[0]
+    return int(exact[0]) if exact.size else None
+
+
 def _pressure_at_angle(p: np.ndarray, theta_src: np.ndarray, angle_deg: float) -> np.ndarray:
     theta_src = np.asarray(theta_src, dtype=float)
-    out = np.full(p.shape[0], complex(np.nan, np.nan), dtype=complex)
-    exact = np.where(np.isclose(theta_src, angle_deg, atol=1e-9))[0]
-    if exact.size:
-        return p[:, int(exact[0])]
-    for fi, row in enumerate(p):
-        valid = _finite_complex(row) & np.isfinite(theta_src)
-        if np.sum(valid) < 2:
-            continue
-        theta_valid = theta_src[valid]
-        if angle_deg < theta_valid[0] or angle_deg > theta_valid[-1]:
-            continue
-        mag_db = 20 * np.log10(np.abs(row[valid]) + 1e-30)
-        phase = np.unwrap(np.angle(row[valid]))
-        mag = np.interp(angle_deg, theta_valid, mag_db)
-        ph = np.interp(angle_deg, theta_valid, phase)
-        out[fi] = 10.0 ** (mag / 20.0) * np.exp(1j * ph)
-    return out
+    angle_index = _matching_angle_index(theta_src, angle_deg)
+    if angle_index is not None:
+        return p[:, angle_index]
+    if theta_src.size < 2:
+        return np.full(p.shape[0], complex(np.nan, np.nan), dtype=complex)
+    return _resample_theta_onto(p, theta_src, np.asarray([angle_deg]))[:, 0]
 
 
 def _resample_pressure_at_angle(
@@ -787,10 +782,8 @@ def _resample_pressure_at_angle(
     angle_deg: float,
 ) -> np.ndarray:
     """Resample one angular trace without eagerly resampling unused traces."""
-    theta_src = np.asarray(theta_src, dtype=float)
-    exact = np.where(np.isclose(theta_src, angle_deg, atol=1e-9))[0]
-    if exact.size:
-        angle_index = int(exact[0])
+    angle_index = _matching_angle_index(theta_src, angle_deg)
+    if angle_index is not None:
         return _resample_frequency_onto(
             freqs_target,
             freqs_src,
