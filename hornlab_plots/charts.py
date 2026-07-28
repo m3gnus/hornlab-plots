@@ -202,14 +202,6 @@ def _response_curve_style(
     }
 
 
-_PHASE_CONVENTION_ALIASES = {
-    "": "exp(-ikr)", "auto": "exp(-ikr)", "default": "exp(-ikr)", "legacy": "exp(-ikr)",
-    "bempp": "exp(-ikr)", "bempp-cl": "exp(-ikr)", "bemppcl": "exp(-ikr)",
-    "exp(-ikr)": "exp(-ikr)", "-ikr": "exp(-ikr)", "e(-ikr)": "exp(-ikr)",
-    "metal": "exp(+ikr)", "exp(+ikr)": "exp(+ikr)", "+ikr": "exp(+ikr)", "e(+ikr)": "exp(+ikr)",
-}
-
-
 def _phase_propagation_sign(convention) -> float:
     """+1 for exp(+ikr) (metal), -1 for exp(-ikr) (bempp/default).
 
@@ -218,13 +210,7 @@ def _phase_propagation_sign(convention) -> float:
     pick the wrong sign and double the propagation phase into an unwrap alias.
     """
     key = str(convention or "").strip().lower().replace(" ", "").replace("_", "-")
-    if key in _PHASE_CONVENTION_ALIASES:
-        return -1.0 if _PHASE_CONVENTION_ALIASES[key] == "exp(-ikr)" else 1.0
-    if "+ikr" in key or "+jkr" in key or "metal" in key:
-        return 1.0
-    if "-ikr" in key or "-jkr" in key or "bempp" in key:
-        return -1.0
-    return -1.0
+    return 1.0 if "+ikr" in key or "+jkr" in key or "metal" in key else -1.0
 
 
 def _passband_weights(freqs, spl):

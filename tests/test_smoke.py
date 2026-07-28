@@ -229,6 +229,25 @@ def test_frequency_response_b64():
     assert _is_valid_b64_png(b64)
 
 
+@pytest.mark.parametrize(
+    ("conventions", "expected"),
+    [
+        (
+            (None, "", "auto", "default", "legacy", "bempp", "exp(-ikr)", "unknown"),
+            -1.0,
+        ),
+        (
+            ("metal", "exp(+ikr)", "e(+ikr)", "exp(+jkr)", "hornlab-metal-bem"),
+            1.0,
+        ),
+    ],
+)
+def test_phase_propagation_sign_conventions(conventions, expected):
+    from hornlab_plots.charts import _phase_propagation_sign
+
+    assert all(_phase_propagation_sign(value) == expected for value in conventions)
+
+
 def test_frequency_response_multi_b64():
     freqs = np.geomspace(100.0, 20000.0, 30)
     lf = 100.0 - 12.0 * np.log10(freqs / 800.0).clip(min=0.0)
