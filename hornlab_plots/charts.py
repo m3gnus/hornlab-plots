@@ -104,11 +104,6 @@ def _apply_canonical_axes(ax, xlabel, ylabel, title, *, theme=None, colors=None)
     )
 
 
-def _setup_dark_axes(ax, xlabel, ylabel, title, *, theme=None, colors=None):
-    """Apply dark theme styling to axes."""
-    _apply_canonical_axes(ax, xlabel, ylabel, title, theme=theme, colors=colors)
-
-
 def _add_log_grid(ax, freq_min, freq_max, *, detailed=False, theme=None, colors=None):
     """Add log-frequency grid lines matching the directivity-heatmap style."""
     theme_obj = apply_theme_overrides(theme, colors=colors)
@@ -717,7 +712,7 @@ def directivity_index_b64(
             ax.legend(loc="upper left", fontsize=9, facecolor=theme_obj.axes_bg,
                       edgecolor=theme_obj.spine_color, labelcolor=theme_obj.text_color)
 
-        _setup_dark_axes(ax, "Frequency [Hz]", "DI [dB]", "Directivity Index", theme=theme_obj)
+        _apply_canonical_axes(ax, "Frequency [Hz]", "DI [dB]", "Directivity Index", theme=theme_obj)
         ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
         freq_min = min(all_plotted_freqs)
@@ -885,7 +880,7 @@ def forward_beam_shape_b64(
                 labelcolor=theme_obj.text_color,
             )
 
-        _setup_dark_axes(
+        _apply_canonical_axes(
             ax, "Frequency (Hz)", "Superellipse p", "Forward Beam Shape",
             theme=theme_obj,
         )
@@ -1108,7 +1103,7 @@ def _build_impedance_figure(
                     label=f"{ref_name} Im(Z)",
                 )
 
-        _setup_dark_axes(ax, "Frequency [Hz]", ylabel, title, theme=theme_obj)
+        _apply_canonical_axes(ax, "Frequency [Hz]", ylabel, title, theme=theme_obj)
         ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
         if reference_data is None:
