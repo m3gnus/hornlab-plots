@@ -146,18 +146,45 @@ def interference_ratio_db(pressure_by_source, members=None):
     names = list(members) if members is not None else list(pressure_by_source)
     if not names:
         raise ValueError("interference ratio requires at least one source")
-    grids = [np.asarray(pressure_by_source[name], dtype=np.complex128) for name in names]
-    shape = grids[0].shape
-    for name, grid in zip(names, grids):
-        if grid.shape != shape:
+    first_name, *remaining_names = names
+    first_grid = np.asarray(pressure_by_source[first_name], dtype=np.complex128)
+    shape = first_grid.shape
+    if not remaining_names:
+        coherent = np.abs(first_grid)
+        incoherent = coherent.copy()
+    else:
+        second_name, *remaining_names = remaining_names
+        second_grid = np.asarray(
+            pressure_by_source[second_name], dtype=np.complex128
+        )
+        if second_grid.shape != shape:
             raise ValueError(
-                f"pressure grid shape mismatch: {name} has {grid.shape}, expected {shape}"
+                f"pressure grid shape mismatch: {second_name} has "
+                f"{second_grid.shape}, expected {shape}"
             )
-    coherent = np.abs(sum(grids))
-    incoherent = sum(np.abs(grid) for grid in grids)
-    return 20.0 * np.log10(
-        np.maximum(coherent, 1.0e-30) / np.maximum(incoherent, 1.0e-30)
-    )
+        coherent_sum = np.add(first_grid, second_grid)
+        incoherent = np.add(np.abs(first_grid), np.abs(second_grid))
+        # The sums own their data; release any dtype-conversion buffers before
+        # streaming the remaining sources.
+        del first_grid, second_grid
+
+        for name in remaining_names:
+            grid = np.asarray(pressure_by_source[name], dtype=np.complex128)
+            if grid.shape != shape:
+                raise ValueError(
+                    f"pressure grid shape mismatch: {name} has {grid.shape}, "
+                    f"expected {shape}"
+                )
+            np.add(coherent_sum, grid, out=coherent_sum)
+            np.add(incoherent, np.abs(grid), out=incoherent)
+        coherent = np.abs(coherent_sum)
+
+    np.maximum(coherent, 1.0e-30, out=coherent)
+    np.maximum(incoherent, 1.0e-30, out=incoherent)
+    np.divide(coherent, incoherent, out=coherent)
+    np.log10(coherent, out=coherent)
+    coherent *= 20.0
+    return coherent
 
 
 def _build_interference_figure(

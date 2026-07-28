@@ -56,6 +56,9 @@ def test_interference_ratio_db_math():
     ratio = hlp.interference_ratio_db({"A": grid, "B": grid.copy()})
     np.testing.assert_allclose(ratio, 0.0, atol=1e-12)
 
+    single = hlp.interference_ratio_db({"A": grid})
+    np.testing.assert_allclose(single, 0.0, atol=1e-12)
+
     anti = hlp.interference_ratio_db({"A": grid, "B": -grid})
     assert np.all(anti < -100.0)
 
@@ -66,6 +69,28 @@ def test_interference_ratio_db_math():
         hlp.interference_ratio_db({"A": grid, "B": grid[:, :, :-1]})
     with pytest.raises(ValueError):
         hlp.interference_ratio_db({})
+
+
+def test_interference_ratio_db_matches_ordered_sum_without_mutating_inputs():
+    rng = np.random.default_rng(260728)
+    sources = {
+        name: rng.standard_normal((7, 2, 5))
+        + 1j * rng.standard_normal((7, 2, 5))
+        for name in ("LF", "MF", "HF")
+    }
+    sources["MF"] = sources["MF"].astype(np.complex64)
+    originals = {name: grid.copy() for name, grid in sources.items()}
+    grids = [np.asarray(grid, dtype=np.complex128) for grid in sources.values()]
+    expected = 20.0 * np.log10(
+        np.maximum(np.abs(sum(grids)), 1.0e-30)
+        / np.maximum(sum(np.abs(grid) for grid in grids), 1.0e-30)
+    )
+
+    actual = hlp.interference_ratio_db(sources)
+
+    np.testing.assert_array_equal(actual, expected)
+    for name, grid in sources.items():
+        np.testing.assert_array_equal(grid, originals[name])
 
 
 def test_save_interference_heatmap_to_disk(tmp_path):
