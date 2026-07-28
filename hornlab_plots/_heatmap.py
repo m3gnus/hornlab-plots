@@ -144,7 +144,17 @@ def _safe_float(value):
 def prepare_heatmap_data(angles, freqs, values):
     """Fill missing values, fractional-octave smooth, interpolate to the
     canonical (361 x 500) display grid, and clip to [MIN_DB, MAX_DB]."""
-    values_filled = _fill_missing_values(values)
+    angles = np.asarray(angles, dtype=float)
+    freqs = np.asarray(freqs, dtype=float)
+    values = np.asarray(values, dtype=float)
+
+    angle_order = np.argsort(angles)
+    frequency_order = np.argsort(freqs)
+    angles = angles[angle_order]
+    freqs = freqs[frequency_order]
+    values = values[np.ix_(angle_order, frequency_order)]
+
+    values_filled = _fill_missing_values(values, angles, freqs)
     values_smooth = _fractional_octave_smooth(values_filled, freqs, FRACTIONAL_OCTAVE)
     interp_angles, interp_freqs, interp_values = _interpolate_heatmap_grid(
         angles, freqs, values_smooth, ANGLE_SAMPLES, FREQ_SAMPLES
@@ -152,7 +162,7 @@ def prepare_heatmap_data(angles, freqs, values):
     return interp_angles, interp_freqs, np.clip(interp_values, MIN_DB, MAX_DB)
 
 
-def _fill_missing_values(values):
+def _fill_missing_values(values, angles, freqs):
     filled = np.array(values, dtype=float, copy=True)
 
     # Fill missing values along angle for each frequency.
@@ -163,13 +173,13 @@ def _fill_missing_values(values):
             continue
         if np.count_nonzero(finite) == 0:
             continue
-        x = np.arange(y.size)
         if np.count_nonzero(finite) == 1:
             filled[:, col] = y[finite][0]
         else:
-            filled[:, col] = np.interp(x, x[finite], y[finite])
+            filled[:, col] = np.interp(angles, angles[finite], y[finite])
 
-    # Fill remaining gaps across frequency.
+    # Fill remaining gaps across frequency on the renderer's log-frequency axis.
+    log_freqs = np.log10(freqs)
     for row in range(filled.shape[0]):
         y = filled[row, :]
         finite = np.isfinite(y)
@@ -178,11 +188,14 @@ def _fill_missing_values(values):
         if np.count_nonzero(finite) == 0:
             filled[row, :] = MIN_DB
             continue
-        x = np.arange(y.size)
         if np.count_nonzero(finite) == 1:
             filled[row, :] = y[finite][0]
         else:
-            filled[row, :] = np.interp(x, x[finite], y[finite])
+            filled[row, :] = np.interp(
+                log_freqs,
+                log_freqs[finite],
+                y[finite],
+            )
 
     filled[~np.isfinite(filled)] = MIN_DB
     return filled

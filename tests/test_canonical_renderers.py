@@ -95,6 +95,51 @@ def test_legacy_directivity_duplicate_angles_are_rejected():
         )
 
 
+def test_heatmap_missing_values_use_physical_coordinates():
+    from hornlab_plots._heatmap import _fill_missing_values
+
+    angles = np.array([0.0, 10.0, 90.0])
+    freqs = np.array([100.0, 200.0, 800.0])
+    values = np.array([
+        [0.0, np.nan, -30.0],
+        [np.nan, np.nan, -20.0],
+        [90.0, np.nan, 60.0],
+    ])
+
+    filled = _fill_missing_values(values, angles, freqs)
+
+    np.testing.assert_allclose(
+        filled,
+        [
+            [0.0, -10.0, -30.0],
+            [10.0, 0.0, -20.0],
+            [90.0, 80.0, 60.0],
+        ],
+        atol=1e-12,
+    )
+
+
+def test_prepare_heatmap_data_sorts_coordinates_with_their_values():
+    from hornlab_plots._heatmap import prepare_heatmap_data
+
+    angles = np.array([-70.0, -5.0, 40.0])
+    freqs = np.array([250.0, 900.0, 7000.0])
+    values = -0.1 * np.abs(angles[:, np.newaxis])
+    values = values - 2.0 * np.log10(freqs[np.newaxis, :] / freqs[0])
+
+    expected = prepare_heatmap_data(angles, freqs, values)
+    angle_order = np.array([2, 0, 1])
+    frequency_order = np.array([1, 2, 0])
+    actual = prepare_heatmap_data(
+        angles[angle_order],
+        freqs[frequency_order],
+        values[np.ix_(angle_order, frequency_order)],
+    )
+
+    for expected_array, actual_array in zip(expected, actual):
+        np.testing.assert_allclose(actual_array, expected_array)
+
+
 def test_directivity_planes_with_different_frequency_grids_do_not_collapse():
     import matplotlib.pyplot as plt
     from hornlab_plots._heatmap import _build_figure_from_planes, _build_planes_from_legacy
