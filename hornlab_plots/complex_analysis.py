@@ -579,12 +579,14 @@ def _di_from_magnitude(p: np.ndarray, theta_deg: np.ndarray,
     """
     theta = np.deg2rad(theta_deg)
     sin_t = np.sin(theta)
-    p2 = np.abs(p) ** 2
-    weighted = p2 * sin_t[None, :]
-    norm = max(float(_trapz(sin_t, theta)), 1e-30)
-    mean = _trapz(weighted, theta, axis=1) / norm
+    p2 = np.abs(p)
+    np.square(p2, out=p2)
     onaxis_idx = int(np.argmin(np.abs(theta_deg)))
-    on_axis = p2[:, onaxis_idx]
+    on_axis = p2[:, onaxis_idx].copy()
+    p2 = p2.astype(np.result_type(p2.dtype, sin_t.dtype), copy=False)
+    np.multiply(p2, sin_t[None, :], out=p2)
+    norm = max(float(_trapz(sin_t, theta)), 1e-30)
+    mean = _trapz(p2, theta, axis=1) / norm
     with np.errstate(divide="ignore", invalid="ignore"):
         return 10.0 * np.log10((on_axis + 1e-30) / (mean + 1e-30))
 

@@ -5,6 +5,7 @@ import pytest
 
 import hornlab_plots.complex_analysis as complex_analysis
 from hornlab_plots.complex_analysis import (
+    _di_from_magnitude,
     _patterns_to_complex,
     _pressure_at_angle,
     _propagation_phase,
@@ -12,6 +13,43 @@ from hornlab_plots.complex_analysis import (
     _resample_pressure_at_angle,
     _resample_theta_onto,
 )
+
+
+@pytest.mark.parametrize("dtype", [np.complex64, np.complex128])
+def test_di_kernel_matches_legacy_expression_without_mutating_input(dtype):
+    theta = np.linspace(0.0, 180.0, 5)
+    pressure = np.asarray(
+        [
+            [1.0 + 2.0j, 2.0 + 1.0j, 3.0 - 1.0j, 2.0 - 2.0j, 1.0 - 1.0j],
+            [2.0 + 0.0j, 1.0 + 3.0j, 4.0 + 1.0j, 3.0 - 2.0j, 2.0 - 1.0j],
+        ],
+        dtype=dtype,
+    )
+    pressure_before = pressure.copy()
+    theta_rad = np.deg2rad(theta)
+    sin_theta = np.sin(theta_rad)
+    pressure_squared = np.abs(pressure) ** 2
+    norm = max(
+        float(complex_analysis._trapz(sin_theta, theta_rad)),
+        1e-30,
+    )
+    mean = (
+        complex_analysis._trapz(
+            pressure_squared * sin_theta[None, :],
+            theta_rad,
+            axis=1,
+        )
+        / norm
+    )
+    with np.errstate(divide="ignore", invalid="ignore"):
+        expected = 10.0 * np.log10(
+            (pressure_squared[:, 0] + 1e-30) / (mean + 1e-30)
+        )
+
+    actual = _di_from_magnitude(pressure, theta)
+
+    np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(pressure, pressure_before)
 
 
 def test_complex_patterns_are_reindexed_by_angle_value():
