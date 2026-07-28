@@ -248,7 +248,7 @@ DARK_THEME = _make_theme("dark")
 # - spec grid colors are exact (already blended for their background), so
 #   the primary grid alpha is 1.0 and minor grids echo at half strength.
 # - specs pin only the heatmap colormap; diverging/cyclic use CVD-safe
-#   stock defaults.
+#   stock defaults. Themes with custom maps pass Colormap objects instead.
 
 _STOCK_DIVERGING_CMAP = "RdBu_r"
 _STOCK_CYCLIC_CMAP = "twilight"
@@ -264,9 +264,11 @@ def _spec_theme(
     grid_linestyle: str,
     grid_linewidth: float,
     cycle: tuple[str, ...],
-    heatmap: str,
+    heatmap: str | Colormap,
     accent: str,
     dpi: int,
+    diverging: str | Colormap = _STOCK_DIVERGING_CMAP,
+    cyclic: str | Colormap = _STOCK_CYCLIC_CMAP,
 ) -> Theme:
     """Build a Theme from designed-spec fields (see comment block above)."""
     role_colors = {
@@ -323,9 +325,11 @@ def _spec_theme(
         response_colors=_freeze_mapping(response_colors),
         plane_colors=_freeze_mapping(plane_colors),
         impedance_colors=_freeze_mapping(impedance_colors),
-        heatmap_cmap=matplotlib.colormaps[heatmap],
-        diverging_cmap=matplotlib.colormaps[_STOCK_DIVERGING_CMAP],
-        cyclic_cmap=matplotlib.colormaps[_STOCK_CYCLIC_CMAP],
+        heatmap_cmap=matplotlib.colormaps[heatmap] if isinstance(heatmap, str) else heatmap,
+        diverging_cmap=(
+            matplotlib.colormaps[diverging] if isinstance(diverging, str) else diverging
+        ),
+        cyclic_cmap=matplotlib.colormaps[cyclic] if isinstance(cyclic, str) else cyclic,
         rc_params=MappingProxyType(
             {
                 "grid.linestyle": grid_linestyle,
@@ -460,10 +464,8 @@ EMBER_THEME = _spec_theme(
 # drawn from the same hue family but tuned for legibility on white and
 # separability under the common CVD types — the blue/red lead pair mirrors the
 # cold/hot ends of the heatmap and carries lf/mf, H/V, and real/imag. Unlike the
-# Fable/Opus spec themes it uses a CUSTOM (unregistered) heatmap colormap, so it
-# is built like the legacy hornlab/dark route with a dedicated builder rather
-# than through ``_spec_theme`` (which resolves a stock colormap name). Its
-# spec'd grid linestyle/weight ride in ``rc_params`` as with the designed themes.
+# Fable/Opus spec themes it uses custom, unregistered colormaps. Its spec'd grid
+# linestyle/weight ride in ``rc_params`` as with the designed themes.
 
 _CLASSIC_INK = "#1A1A1A"
 _CLASSIC_BG = "#FFFFFF"
@@ -518,75 +520,21 @@ def _classic_cyclic_cmap() -> Colormap:
     )
 
 
-def _classic_theme(name: str) -> Theme:
-    """Build the light Klippel-style ``classic`` theme (custom heatmap map)."""
-    role_colors = {
-        "figure_bg": _CLASSIC_BG,
-        "background": _CLASSIC_BG,
-        "axes_bg": _CLASSIC_BG,
-        "axes": _CLASSIC_BG,
-        "text": _CLASSIC_INK,
-        "tick": _CLASSIC_INK,
-        "spine": _CLASSIC_INK,
-        "grid": _CLASSIC_GRID,
-        "contour_outline": _CLASSIC_BG,
-        "reference_contour": _CLASSIC_ACCENT,
-        "mesh_limit": _MESH_LIMIT_COLOR,
-        "accent": _CLASSIC_ACCENT,
-    }
-    response_colors = {
-        "lf": _CLASSIC_CYCLE[0],
-        "mf": _CLASSIC_CYCLE[1],
-        "hf": _CLASSIC_CYCLE[2],
-        "combined": _CLASSIC_INK,
-        "raw": _CLASSIC_CYCLE[5],
-        "other": _CLASSIC_CYCLE[4],
-    }
-    plane_colors = {
-        "horizontal": _CLASSIC_CYCLE[0],
-        "vertical": _CLASSIC_CYCLE[1],
-        "diagonal": _CLASSIC_CYCLE[2],
-    }
-    impedance_colors = {
-        "real": _CLASSIC_CYCLE[0],
-        "imaginary": _CLASSIC_CYCLE[1],
-    }
-    return Theme(
-        name=name,
-        figure_bg=_CLASSIC_BG,
-        axes_bg=_CLASSIC_BG,
-        text_color=_CLASSIC_INK,
-        tick_color=_CLASSIC_INK,
-        spine_color=_CLASSIC_INK,
-        grid_color=_CLASSIC_GRID,
-        contour_outline=_CLASSIC_BG,
-        reference_contour_color=_CLASSIC_ACCENT,
-        mesh_limit_color=_MESH_LIMIT_COLOR,
-        primary_grid_alpha=1.0,
-        secondary_grid_alpha=0.5,
-        grid_alpha=1.0,
-        grid_alpha_minor=0.5,
-        fill_alpha=_FILL_ALPHA,
-        dpi=160,
-        palette=_CLASSIC_CYCLE,
-        role_colors=_freeze_mapping(role_colors),
-        line_colors=_CLASSIC_CYCLE,
-        response_colors=_freeze_mapping(response_colors),
-        plane_colors=_freeze_mapping(plane_colors),
-        impedance_colors=_freeze_mapping(impedance_colors),
-        heatmap_cmap=_classic_heatmap_cmap(),
-        diverging_cmap=_classic_diverging_cmap(),
-        cyclic_cmap=_classic_cyclic_cmap(),
-        rc_params=MappingProxyType(
-            {
-                "grid.linestyle": "-",
-                "grid.linewidth": 0.6,
-            }
-        ),
-    )
-
-
-CLASSIC_THEME = _classic_theme("classic")
+CLASSIC_THEME = _spec_theme(
+    "classic",
+    figure_bg=_CLASSIC_BG,
+    axes_bg=_CLASSIC_BG,
+    ink=_CLASSIC_INK,
+    grid_color=_CLASSIC_GRID,
+    grid_linestyle="-",
+    grid_linewidth=0.6,
+    cycle=_CLASSIC_CYCLE,
+    heatmap=_classic_heatmap_cmap(),
+    accent=_CLASSIC_ACCENT,
+    dpi=160,
+    diverging=_classic_diverging_cmap(),
+    cyclic=_classic_cyclic_cmap(),
+)
 
 
 BUILTIN_THEMES: Mapping[str, Theme] = MappingProxyType(
