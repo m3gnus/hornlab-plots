@@ -198,13 +198,23 @@ def _response_curve_style(
 
 
 def _phase_propagation_sign(convention) -> float:
-    """+1 for exp(+ikr) (metal), -1 for exp(-ikr) (bempp/default).
+    """Return the propagation sign for a phase-convention label.
 
-    Positive markers are ``+ikr``, ``+jkr``, ``metal``, ``positive``, and
-    ``positive-spatial``. They are matched by substring to tolerate decorated
-    backend labels such as ``hornlab-metal-bem``. All other labels retain the
-    default negative sign. Keep these markers aligned with Waveguide
-    Generator's ``server/solver/charts.py::_PHASE_TIME_CONVENTION_ALIASES``.
+    Documented labels map as follows:
+
+    * ``+1.0`` / ``exp(+ikr)``: ``metal``, ``exp(+ikr)``, ``+ikr``,
+      ``e(+ikr)``, ``positive``, and ``positive-spatial``.
+    * ``-1.0`` / ``exp(-ikr)``: ``""`` (also ``None``), ``auto``,
+      ``default``, ``legacy``, ``bempp``, ``bempp-cl``, ``bemppcl``,
+      ``exp(-ikr)``, ``-ikr``, and ``e(-ikr)``.
+
+    Matching is case-insensitive. Falsey inputs become the empty string; other
+    inputs are stringified, stripped, lowercased, stripped of literal spaces,
+    and have underscores changed to hyphens. After normalization, any label
+    containing ``+ikr``, ``+jkr``, ``metal``, or ``positive`` returns ``+1.0``.
+    This also accepts decorated labels such as ``hornlab-metal-bem`` and
+    normalized variants such as ``exp(+jkr)`` or ``positive_spatial``. Every
+    other value, including unknown labels, returns the default ``-1.0``.
     """
     key = str(convention or "").strip().lower().replace(" ", "").replace("_", "-")
     positive_markers = ("+ikr", "+jkr", "metal", "positive")
