@@ -140,6 +140,125 @@ def test_prepare_heatmap_data_sorts_coordinates_with_their_values():
         np.testing.assert_allclose(actual_array, expected_array)
 
 
+def _smoothing_probe_data():
+    angles = np.array([-60.0, 0.0, 60.0])
+    freqs = np.geomspace(500.0, 20_000.0, 56)
+    values = (
+        -10.0
+        + 3.0 * np.sin(np.linspace(0.0, 9.0, freqs.size))[None, :]
+        - np.abs(angles[:, None]) / 20.0
+    )
+    return angles, freqs, values
+
+
+def test_heatmap_default_matches_legacy_output_on_realistic_grid():
+    from hornlab_plots._heatmap import (
+        _fill_missing_values,
+        _fractional_octave_smooth,
+        _interpolate_heatmap_grid,
+        prepare_heatmap_data,
+    )
+    from hornlab_plots.style import (
+        ANGLE_SAMPLES,
+        FRACTIONAL_OCTAVE,
+        FREQ_SAMPLES,
+        MAX_DB,
+        MIN_DB,
+    )
+
+    angles, freqs, values = _smoothing_probe_data()
+    filled = _fill_missing_values(values, angles, freqs)
+    legacy_smoothed = _fractional_octave_smooth(
+        filled,
+        freqs,
+        FRACTIONAL_OCTAVE,
+    )
+    assert np.array_equal(legacy_smoothed, filled)
+    legacy_angles, legacy_freqs, legacy_values = _interpolate_heatmap_grid(
+        angles,
+        freqs,
+        legacy_smoothed,
+        ANGLE_SAMPLES,
+        FREQ_SAMPLES,
+    )
+    legacy = (
+        legacy_angles,
+        legacy_freqs,
+        np.clip(legacy_values, MIN_DB, MAX_DB),
+    )
+
+    actual = prepare_heatmap_data(angles, freqs, values)
+
+    for actual_array, legacy_array in zip(actual, legacy):
+        np.testing.assert_array_equal(actual_array, legacy_array)
+
+
+def test_heatmap_smoothing_option_changes_interpolated_data():
+    from hornlab_plots._heatmap import prepare_heatmap_data
+
+    angles, freqs, values = _smoothing_probe_data()
+    default_values = prepare_heatmap_data(angles, freqs, values)[2]
+    smoothed_values = prepare_heatmap_data(
+        angles,
+        freqs,
+        values,
+        smooth=True,
+    )[2]
+
+    assert not np.array_equal(smoothed_values, default_values)
+    assert np.max(np.abs(smoothed_values - default_values)) > 0.0
+
+
+def test_heatmap_smoothing_fraction_is_honoured():
+    from hornlab_plots._heatmap import (
+        _fractional_octave_smooth,
+        prepare_heatmap_data,
+    )
+    from hornlab_plots.style import FRACTIONAL_OCTAVE, MAX_DB, MIN_DB
+
+    angles, freqs, values = _smoothing_probe_data()
+    interp_angles, interp_freqs, interp_values = prepare_heatmap_data(
+        angles,
+        freqs,
+        values,
+    )
+    default_fraction = prepare_heatmap_data(
+        angles,
+        freqs,
+        values,
+        smooth=True,
+    )
+    explicit_default_fraction = prepare_heatmap_data(
+        angles,
+        freqs,
+        values,
+        smooth=True,
+        smoothing_fraction=FRACTIONAL_OCTAVE,
+    )
+    twelfth_octave = prepare_heatmap_data(
+        angles,
+        freqs,
+        values,
+        smooth=True,
+        smoothing_fraction=12.0,
+    )
+    expected_twelfth_octave = np.clip(
+        _fractional_octave_smooth(interp_values, interp_freqs, 12.0),
+        MIN_DB,
+        MAX_DB,
+    )
+
+    np.testing.assert_array_equal(twelfth_octave[0], interp_angles)
+    np.testing.assert_array_equal(twelfth_octave[1], interp_freqs)
+    np.testing.assert_array_equal(twelfth_octave[2], expected_twelfth_octave)
+    for implicit, explicit in zip(
+        default_fraction,
+        explicit_default_fraction,
+    ):
+        np.testing.assert_array_equal(implicit, explicit)
+    assert not np.array_equal(twelfth_octave[2], default_fraction[2])
+
+
 def test_directivity_planes_with_different_frequency_grids_do_not_collapse():
     import matplotlib.pyplot as plt
     from hornlab_plots._heatmap import _build_figure_from_planes, _build_planes_from_legacy

@@ -39,6 +39,8 @@ b64 = hlp.directivity_heatmap_from_legacy_dict(
     frequencies=[1000, 2000, 4000],
     directivity={"horizontal": [...], "vertical": [...]},
     reference_level=-6.0,
+    smooth=True,                 # opt in; omitted means no smoothing
+    smoothing_fraction=24.0,    # 1/24 octave; choose another denominator
 )
 
 # Or from numpy arrays directly (preferred).
@@ -108,7 +110,9 @@ Lower-level helpers that take a matplotlib `Axes` for composition:
 
 ```python
 hlp.render_single_heatmap(ax, freqs, angles, values, title, reference_level=-6.0)
-hlp.prepare_heatmap_data(angles, freqs, values)
+hlp.prepare_heatmap_data(
+    angles, freqs, values, smooth=True, smoothing_fraction=24.0
+)
 hlp.build_grid_from_legacy(freqs, patterns)
 ```
 

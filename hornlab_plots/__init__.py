@@ -8,7 +8,7 @@ produce.
 Public API:
 
 - ``directivity_heatmap_from_legacy_dict(frequencies, directivity, ...)`` —
-  byte-equivalent replacement for WG ``render_directivity_plot``.
+  API-compatible replacement for WG ``render_directivity_plot``.
   Accepts the dict-of-list payload shape ``{"horizontal": [[[angle, db], ...], ...], ...}``.
 - ``directivity_heatmap_b64(freq_hz, angles_deg, spl_db, ...)`` —
   numpy-array signature (preferred for new callers).

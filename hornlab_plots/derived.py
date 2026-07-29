@@ -33,7 +33,12 @@ from matplotlib.ticker import FuncFormatter
 
 from ._grid import freq_formatter, log_grid_lines, preferred_frequency_ticks
 from ._heatmap import _draw_mesh_valid_markers, prepare_heatmap_data, render_single_heatmap
-from .style import apply_theme_overrides, theme_grid_kwargs, theme_rc_context
+from .style import (
+    FRACTIONAL_OCTAVE,
+    apply_theme_overrides,
+    theme_grid_kwargs,
+    theme_rc_context,
+)
 
 # Footnote texts carried verbatim from the addin so rendered wording stays
 # identical across the call-site swap.
@@ -200,6 +205,8 @@ def _build_interference_figure(
     mesh_valid_radiating_hz=None,
     theme=None,
     colors=None,
+    smooth=False,
+    smoothing_fraction=FRACTIONAL_OCTAVE,
 ):
     theme_obj = apply_theme_overrides(theme, colors=colors)
     freqs = np.asarray(frequencies_hz, dtype=np.float64)
@@ -225,7 +232,13 @@ def _build_interference_figure(
         fig.patch.set_facecolor(theme_obj.figure_bg)
         for plane_index, (ax, plane) in enumerate(zip(axes, plane_names)):
             values = ratio_db[:, plane_index, :].T  # (n_angle, n_freq)
-            angles_p, freqs_p, values_p = prepare_heatmap_data(angles, freqs, values)
+            angles_p, freqs_p, values_p = prepare_heatmap_data(
+                angles,
+                freqs,
+                values,
+                smooth=smooth,
+                smoothing_fraction=smoothing_fraction,
+            )
             render_single_heatmap(
                 ax,
                 freqs_p,
@@ -276,6 +289,8 @@ def save_interference_heatmap(
     dpi=150,
     theme=None,
     colors=None,
+    smooth=False,
+    smoothing_fraction=FRACTIONAL_OCTAVE,
 ):
     """Save the driver-interference heatmap (one panel per plane) to PNG.
 
@@ -300,6 +315,8 @@ def save_interference_heatmap(
         reference_level: dB level for the prominent contour (default -6).
         mesh_valid_hz: Solid conservative fully-resolved frequency marker.
         mesh_valid_radiating_hz: Dashed radiating-aperture frequency marker.
+        smooth: Apply fractional-octave smoothing after canonical interpolation.
+        smoothing_fraction: Fractional-octave denominator (default 24).
 
     Returns:
         The output Path.
@@ -316,6 +333,8 @@ def save_interference_heatmap(
         mesh_valid_radiating_hz=mesh_valid_radiating_hz,
         theme=theme,
         colors=colors,
+        smooth=smooth,
+        smoothing_fraction=smoothing_fraction,
     )
     return _save_figure(fig, output_path, dpi=dpi, bbox_inches="tight")
 
