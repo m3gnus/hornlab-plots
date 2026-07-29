@@ -276,7 +276,15 @@ def test_frequency_response_b64():
             -1.0,
         ),
         (
-            ("metal", "exp(+ikr)", "e(+ikr)", "exp(+jkr)", "hornlab-metal-bem"),
+            (
+                "metal",
+                "exp(+ikr)",
+                "e(+ikr)",
+                "exp(+jkr)",
+                "hornlab-metal-bem",
+                "positive",
+                "positive-spatial",
+            ),
             1.0,
         ),
     ],

@@ -200,12 +200,15 @@ def _response_curve_style(
 def _phase_propagation_sign(convention) -> float:
     """+1 for exp(+ikr) (metal), -1 for exp(-ikr) (bempp/default).
 
-    Tolerates decorated/backend-style labels (e.g. ``hornlab-metal-bem``) by
-    substring so an unrecognized-but-identifiable convention does not silently
-    pick the wrong sign and double the propagation phase into an unwrap alias.
+    Positive markers are ``+ikr``, ``+jkr``, ``metal``, ``positive``, and
+    ``positive-spatial``. They are matched by substring to tolerate decorated
+    backend labels such as ``hornlab-metal-bem``. All other labels retain the
+    default negative sign. Keep these markers aligned with Waveguide
+    Generator's ``server/solver/charts.py::_PHASE_TIME_CONVENTION_ALIASES``.
     """
     key = str(convention or "").strip().lower().replace(" ", "").replace("_", "-")
-    return 1.0 if "+ikr" in key or "+jkr" in key or "metal" in key else -1.0
+    positive_markers = ("+ikr", "+jkr", "metal", "positive")
+    return 1.0 if any(marker in key for marker in positive_markers) else -1.0
 
 
 def _passband_weights(freqs, spl):
