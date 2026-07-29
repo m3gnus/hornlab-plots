@@ -566,6 +566,8 @@ def _build_planes_from_legacy(frequencies, directivity):
             "angles": angles,
             "freqs": plane_freqs,
             "values": values,
+            "angles_raw": angles_raw,
+            "freqs_raw": freqs_raw,
             "values_raw": values_raw,
         })
     return planes
@@ -663,8 +665,8 @@ def _build_figure_from_planes(
 def _planes_are_symmetric(horizontal, vertical):
     """Return whether H and V share coordinates and effectively equal values."""
     return (
-        np.array_equal(horizontal["angles"], vertical["angles"])
-        and np.array_equal(horizontal["freqs"], vertical["freqs"])
+        np.array_equal(horizontal["angles_raw"], vertical["angles_raw"])
+        and np.array_equal(horizontal["freqs_raw"], vertical["freqs_raw"])
         and check_symmetry(horizontal["values_raw"], vertical["values_raw"])
     )
 
