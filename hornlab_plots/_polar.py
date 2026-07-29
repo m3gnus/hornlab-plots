@@ -38,7 +38,8 @@ def prepare_polar_line_data(
     ``values`` is shaped ``(n_freq, n_angle)`` and may be complex pressure or
     already-dB data. Each requested target frequency resolves to the nearest
     available frequency in ``frequencies_hz``. Coordinate arrays and target
-    frequencies must be finite, non-empty 1D arrays.
+    frequencies must be finite, non-empty 1D arrays. Angles may be supplied in
+    any order but must be unique.
     """
     freqs = np.asarray(frequencies_hz, dtype=float)
     angles = np.asarray(angles_deg, dtype=float)
@@ -64,6 +65,12 @@ def prepare_polar_line_data(
         raise ValueError("angles_deg must contain only finite values")
     if not np.all(np.isfinite(targets)):
         raise ValueError("target_frequencies_hz must contain only finite values")
+
+    angle_order = np.argsort(angles, kind="stable")
+    angles = angles[angle_order]
+    db = db[:, angle_order]
+    if np.any(np.diff(angles) == 0.0):
+        raise ValueError("angles_deg must contain unique values")
 
     reference_angle = float(reference_angle_deg)
     if not np.isfinite(reference_angle):

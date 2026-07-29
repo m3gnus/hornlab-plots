@@ -148,6 +148,45 @@ def test_prepare_polar_line_data_selects_nearest_and_normalizes():
     np.testing.assert_allclose(rows, [[0.0, -4.0, -10.0], [0.0, -5.0, -13.0]])
 
 
+def test_prepare_polar_line_data_sorts_angles_with_their_values():
+    freqs = np.array([100.0, 200.0])
+    angles = np.array([-60.0, 0.0, 30.0, 90.0])
+    db = np.array([
+        [-8.0, 0.0, -2.0, -12.0],
+        [-10.0, 1.0, -3.0, -15.0],
+    ])
+    expected = hlp.prepare_polar_line_data(
+        freqs,
+        angles,
+        db,
+        [190.0],
+        angle_min_deg=-60.0,
+        angle_max_deg=30.0,
+    )
+
+    for order in (np.array([3, 2, 1, 0]), np.array([2, 0, 3, 1])):
+        actual = hlp.prepare_polar_line_data(
+            freqs,
+            angles[order],
+            db[:, order],
+            [190.0],
+            angle_min_deg=-60.0,
+            angle_max_deg=30.0,
+        )
+        for expected_array, actual_array in zip(expected, actual):
+            np.testing.assert_array_equal(actual_array, expected_array)
+
+
+def test_prepare_polar_line_data_rejects_duplicate_angles():
+    with pytest.raises(ValueError, match="angles_deg must contain unique values"):
+        hlp.prepare_polar_line_data(
+            [100.0],
+            [-30.0, 0.0, 0.0, 30.0],
+            [[-3.0, 0.0, 2.0, -3.0]],
+            [100.0],
+        )
+
+
 @pytest.mark.parametrize(
     ("frequencies", "angles", "values", "targets", "match"),
     [
