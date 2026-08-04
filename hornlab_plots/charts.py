@@ -202,21 +202,33 @@ def _phase_propagation_sign(convention) -> float:
 
     Documented labels map as follows:
 
-    * ``+1.0`` / ``exp(+ikr)``: ``metal``, ``exp(+ikr)``, ``+ikr``,
-      ``e(+ikr)``, ``positive``, and ``positive-spatial``.
+    * ``+1.0`` / ``exp(+ikr)``: ``metal``, ``bempp``, their HornLab engine
+      and device aliases, ``exp(+ikr)``, ``+ikr``, ``e(+ikr)``, ``positive``,
+      and ``positive-spatial``. Both HornLab backends use the outgoing
+      ``exp(+ikr)`` Helmholtz kernel under the ``e^{-i*omega*t}`` convention.
     * ``-1.0`` / ``exp(-ikr)``: ``""`` (also ``None``), ``auto``,
-      ``default``, ``legacy``, ``bempp``, ``bempp-cl``, ``bemppcl``,
-      ``exp(-ikr)``, ``-ikr``, and ``e(-ikr)``.
+      ``default``, ``legacy``, ``exp(-ikr)``, ``-ikr``, and ``e(-ikr)``.
 
     Matching is case-insensitive. Falsey inputs become the empty string; other
     inputs are stringified, stripped, lowercased, stripped of literal spaces,
     and have underscores changed to hyphens. After normalization, any label
-    containing ``+ikr``, ``+jkr``, ``metal``, or ``positive`` returns ``+1.0``.
+    equal to a known Bempp backend/device name, or containing ``+ikr``,
+    ``+jkr``, ``metal``, or ``positive``, returns ``+1.0``.
     This also accepts decorated labels such as ``hornlab-metal-bem`` and
     normalized variants such as ``exp(+jkr)`` or ``positive_spatial``. Every
     other value, including unknown labels, returns the default ``-1.0``.
     """
     key = str(convention or "").strip().lower().replace(" ", "").replace("_", "-")
+    positive_bempp_aliases = {
+        "bempp",
+        "bempp-cl",
+        "bemppcl",
+        "hornlab-bempp-bem",
+        "bempp-cl-numba",
+        "bempp-cl-opencl",
+    }
+    if key in positive_bempp_aliases:
+        return 1.0
     positive_markers = ("+ikr", "+jkr", "metal", "positive")
     return 1.0 if any(marker in key for marker in positive_markers) else -1.0
 

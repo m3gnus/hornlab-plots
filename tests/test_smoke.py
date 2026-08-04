@@ -272,7 +272,7 @@ def test_frequency_response_b64():
     ("conventions", "expected"),
     [
         (
-            (None, "", "auto", "default", "legacy", "bempp", "exp(-ikr)", "unknown"),
+            (None, "", "auto", "default", "legacy", "exp(-ikr)", "unknown"),
             -1.0,
         ),
         (
@@ -282,6 +282,12 @@ def test_frequency_response_b64():
                 "e(+ikr)",
                 "exp(+jkr)",
                 "hornlab-metal-bem",
+                "bempp",
+                "bempp-cl",
+                "bemppcl",
+                "hornlab-bempp-bem",
+                "bempp-cl-numba",
+                "bempp_cl_opencl",
                 "positive",
                 "positive-spatial",
             ),
