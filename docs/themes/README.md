@@ -17,6 +17,8 @@ synthetic directivity heatmap (the theme's colormap) at the theme's DPI.
 | `sepia` | Solarized-warm low-glare reading theme for long sessions and printed reports. | [sepia.png](sepia.png) |
 | `phosphor` | CRT oscilloscope instrument aesthetic; green-screen lab-bench mood with luminance-separated leads. | [phosphor.png](phosphor.png) |
 | `ember` | Warm charcoal studio wildcard; steel-blue vs stoked-ember lead pair, warm/cool alternating cycle. | [ember.png](ember.png) |
+| `console` | The Waveguide Generator interface's own dark palette; a figure exported from the application lands on the same panel, ink and accent as the window around it. | [console.png](console.png) |
+| `vellum` | The application's light palette, same contract as console; warm paper, rust accent, the arctic map read as ink on the page. | [vellum.png](vellum.png) |
 | `classic` | Light Klippel-report look on white; jet-family heatmap with a CVD-aware blue/red lead pair mirroring its cold/hot ends. | [classic.png](classic.png) |
 
 ## hornlab
@@ -58,6 +60,14 @@ synthetic directivity heatmap (the theme's colormap) at the theme's DPI.
 ## ember
 
 ![ember](ember.png)
+
+## console
+
+![console](console.png)
+
+## vellum
+
+![vellum](vellum.png)
 
 ## classic
 

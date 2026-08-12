@@ -27,7 +27,28 @@ EXPECTED_THEME_NAMES = {
     "sepia",
     "phosphor",
     "ember",
+    "console",
+    "vellum",
     "classic",
+}
+
+# The application themes are not an independent design: every value below is a
+# Waveguide Generator design token, so a change here has to be a change there.
+APP_THEMES = {
+    "console": {
+        "figure_bg": "#211F1D",
+        "axes_bg": "#211F1D",
+        "ink": "#ECE8E0",
+        "grid_color": "#4A453D",
+        "accent": "#E0673F",
+    },
+    "vellum": {
+        "figure_bg": "#F1F2ED",
+        "axes_bg": "#F1F2ED",
+        "ink": "#1D1F20",
+        "grid_color": "#CBCDC5",
+        "accent": "#A5391B",
+    },
 }
 
 THEME_NAMES = sorted(style.BUILTIN_THEMES)
@@ -146,6 +167,23 @@ def _iter_theme_colors(theme):
     yield from theme.response_colors.values()
     yield from theme.plane_colors.values()
     yield from theme.impedance_colors.values()
+
+
+@pytest.mark.parametrize("name", sorted(APP_THEMES))
+def test_application_theme_matches_interface_tokens(name):
+    theme = style.get_theme(name)
+    pinned = APP_THEMES[name]
+    assert theme.figure_bg == pinned["figure_bg"]
+    # The plot sits directly on the panel in the application; an export that
+    # draws an inner frame no longer matches the window it came from.
+    assert theme.axes_bg == pinned["axes_bg"]
+    assert theme.figure_bg == theme.axes_bg
+    assert theme.text_color == pinned["ink"]
+    assert theme.grid_color == pinned["grid_color"]
+    assert theme.reference_contour_color == pinned["accent"]
+    # Both application themes read their map on the arctic ramp, not on a
+    # per-theme colormap; the interface mirrors this table.
+    assert theme.heatmap_cmap.name == "waveguide_arctic"
 
 
 def test_all_expected_themes_registered():

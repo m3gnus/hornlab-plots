@@ -46,6 +46,8 @@ THEME_INTENTS: dict[str, str] = {
     "sepia": "Solarized-warm low-glare reading theme for long sessions and printed reports.",
     "phosphor": "CRT oscilloscope instrument aesthetic; green-screen lab-bench mood with luminance-separated leads.",
     "ember": "Warm charcoal studio wildcard; steel-blue vs stoked-ember lead pair, warm/cool alternating cycle.",
+    "console": "The Waveguide Generator interface's own dark palette; a figure exported from the application lands on the same panel, ink and accent as the window around it.",
+    "vellum": "The application's light palette, same contract as console; warm paper, rust accent, the arctic map read as ink on the page.",
     "classic": "Light Klippel-report look on white; jet-family heatmap with a CVD-aware blue/red lead pair mirroring its cold/hot ends.",
 }
 

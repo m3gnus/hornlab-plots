@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hornlab-plots"
-version = "1.0.0"
+version = "1.1.0"
 description = "Canonical visualization stack for HornLab (directivity heatmaps, polar plots, frequency response, impedance)"
 requires-python = ">=3.10"
 license = { text = "AGPL-3.0-or-later" }
