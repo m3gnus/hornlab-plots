@@ -458,56 +458,6 @@ EMBER_THEME = _spec_theme(
 )
 
 
-# Waveguide Generator application themes -----------------------------------
-#
-# Console (dark) and Vellum (light) are the palettes the Waveguide Generator
-# interface itself is built from, so a figure exported from the application
-# lands on the same surfaces, ink and accent the surrounding window uses.
-# Unlike the spec themes these are not an independent design: the greys,
-# borders and accent below are the app's own tokens and must not drift from
-# them.
-#
-# Both use the arctic heatmap rather than a per-theme colormap. It is the map
-# these figures have always been read on, and it carries real hue travel --
-# blue through violet and magenta to red -- which a single-hue warm ramp
-# cannot, and which shallow directivity gradients need.
-#
-# figure_bg equals axes_bg on purpose. In the application the plot sits
-# directly on a panel with no inner frame, and an export that reproduces that
-# is the point of these two themes existing.
-
-_CONSOLE_PANEL = "#211F1D"
-_VELLUM_PANEL = "#F1F2ED"
-
-CONSOLE_THEME = _spec_theme(
-    "console",
-    figure_bg=_CONSOLE_PANEL,
-    axes_bg=_CONSOLE_PANEL,
-    ink="#ECE8E0",
-    grid_color="#4A453D",
-    grid_linestyle="-",
-    grid_linewidth=0.6,
-    cycle=("#E0673F", "#5D9BD9", "#AD8400", "#00A6AD", "#CA90F3", "#60B374"),
-    heatmap=_heatmap_cmap(),
-    accent="#E0673F",
-    dpi=140,
-)
-
-VELLUM_THEME = _spec_theme(
-    "vellum",
-    figure_bg=_VELLUM_PANEL,
-    axes_bg=_VELLUM_PANEL,
-    ink="#1D1F20",
-    grid_color="#CBCDC5",
-    grid_linestyle="-",
-    grid_linewidth=0.6,
-    cycle=("#A5391B", "#3180C8", "#835F00", "#008F99", "#8B54B0", "#398D51"),
-    heatmap=_heatmap_cmap(),
-    accent="#A5391B",
-    dpi=140,
-)
-
-
 # Classic Klippel theme ----------------------------------------------------
 #
 # A light "classic audio-measurement report" look built from the Klippel-style
@@ -586,6 +536,72 @@ CLASSIC_THEME = _spec_theme(
     dpi=160,
     diverging=_classic_diverging_cmap(),
     cyclic=_classic_cyclic_cmap(),
+)
+
+
+# Waveguide Generator application themes -----------------------------------
+#
+# Console (dark) and Vellum (light) are the palettes the Waveguide Generator
+# interface itself is built from, so a figure exported from the application
+# lands on the same surfaces, ink and accent the surrounding window uses.
+# Unlike the spec themes these are not an independent design: the greys,
+# borders and accent below are the app's own tokens and must not drift from
+# them.
+#
+# Neither invents a colormap. Console reads the map on the arctic ramp, which
+# is what these figures have always been exported on and which carries real
+# hue travel -- blue through violet and magenta to red -- where a single-hue
+# warm ramp would not. Vellum cannot use it: arctic's floor is near-black,
+# which on paper makes the quietest part of the map the heaviest thing on the
+# page. It reads the Klippel ramp instead, whose floor is the page and whose
+# top is red, so on light the map grows out of the paper rather than sitting
+# on top of it.
+#
+# The one departure: Klippel's floor is pure white, which glows against warm
+# paper, so vellum re-anchors that single stop to its own page colour. Every
+# other stop is Klippel's.
+#
+# figure_bg equals axes_bg on purpose. In the application the plot sits
+# directly on a panel with no inner frame, and an export that reproduces that
+# is the point of these two themes existing.
+
+_CONSOLE_PANEL = "#211F1D"
+_VELLUM_PANEL = "#F1F2ED"
+
+
+def _vellum_heatmap_cmap() -> Colormap:
+    return LinearSegmentedColormap.from_list(
+        "vellum_klippel",
+        [(position, _VELLUM_PANEL if position == 0.0 else color) for position, color in _KLIPPEL_COLORS],
+        N=256,
+    )
+
+CONSOLE_THEME = _spec_theme(
+    "console",
+    figure_bg=_CONSOLE_PANEL,
+    axes_bg=_CONSOLE_PANEL,
+    ink="#ECE8E0",
+    grid_color="#4A453D",
+    grid_linestyle="-",
+    grid_linewidth=0.6,
+    cycle=("#E0673F", "#5D9BD9", "#AD8400", "#00A6AD", "#CA90F3", "#60B374"),
+    heatmap=_heatmap_cmap(),
+    accent="#E0673F",
+    dpi=140,
+)
+
+VELLUM_THEME = _spec_theme(
+    "vellum",
+    figure_bg=_VELLUM_PANEL,
+    axes_bg=_VELLUM_PANEL,
+    ink="#1D1F20",
+    grid_color="#CBCDC5",
+    grid_linestyle="-",
+    grid_linewidth=0.6,
+    cycle=("#A5391B", "#3180C8", "#835F00", "#008F99", "#8B54B0", "#398D51"),
+    heatmap=_vellum_heatmap_cmap(),
+    accent="#A5391B",
+    dpi=140,
 )
 
 

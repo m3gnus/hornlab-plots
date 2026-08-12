@@ -41,6 +41,7 @@ APP_THEMES = {
         "ink": "#ECE8E0",
         "grid_color": "#4A453D",
         "accent": "#E0673F",
+        "heatmap": "waveguide_arctic",
     },
     "vellum": {
         "figure_bg": "#F1F2ED",
@@ -48,6 +49,7 @@ APP_THEMES = {
         "ink": "#1D1F20",
         "grid_color": "#CBCDC5",
         "accent": "#A5391B",
+        "heatmap": "vellum_klippel",
     },
 }
 
@@ -181,9 +183,9 @@ def test_application_theme_matches_interface_tokens(name):
     assert theme.text_color == pinned["ink"]
     assert theme.grid_color == pinned["grid_color"]
     assert theme.reference_contour_color == pinned["accent"]
-    # Both application themes read their map on the arctic ramp, not on a
-    # per-theme colormap; the interface mirrors this table.
-    assert theme.heatmap_cmap.name == "waveguide_arctic"
+    # Console reads the map on the arctic ramp and vellum on the Klippel one,
+    # re-anchored to the page; the interface mirrors this table.
+    assert theme.heatmap_cmap.name == pinned["heatmap"]
 
 
 def test_all_expected_themes_registered():
