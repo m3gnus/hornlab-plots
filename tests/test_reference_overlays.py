@@ -470,3 +470,18 @@ def test_heatmap_reference_uses_only_plane_keys_present_in_primary_and_reference
     assert unmatched_only == baseline
     assert common_only != baseline
     assert common_plus_unmatched == common_only
+
+
+def test_impedance_ylabel_names_the_quantity_it_was_given():
+    """A driver-coupled solve reports ohms, not an acoustic load.
+
+    Letting 'ohms' fall through to the Pa·s/m default put the wrong physical
+    quantity on the axis of a curve whose values are electrical.
+    """
+    from hornlab_plots.charts import _impedance_ylabel
+
+    assert _impedance_ylabel("ohms") == "Z [Ω]"
+    assert _impedance_ylabel("Ω") == "Z [Ω]"
+    assert _impedance_ylabel("Z/(rho*c)") == "Z / ρc"
+    assert _impedance_ylabel("Pa·s/m") == "Z [Pa·s/m]"
+    assert _impedance_ylabel(None) == "Z [Pa·s/m]"

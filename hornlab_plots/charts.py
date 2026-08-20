@@ -1185,12 +1185,19 @@ def _impedance_ylabel(units):
     for specific acoustic impedance normalized to rho*c; label it accordingly
     instead of the physical ``Pa·s/m`` default so the normalized curve reads
     correctly.
+
+    A driver-coupled solve sends ``'ohms'`` instead, because its impedance is
+    the driver's electrical input impedance rather than an acoustic load. That
+    fell through to the acoustic ``Pa·s/m`` default, which named the wrong
+    physical quantity on a curve whose values are ohms.
     """
     if units is None:
         return "Z [Pa·s/m]"
     text = str(units).strip().lower().replace(" ", "")
     if "rho" in text or "ρ" in text or text in {"specific", "normalized", "normalised"}:
         return "Z / ρc"
+    if "ohm" in text or text in {"Ω", "ω", "electrical"}:
+        return "Z [Ω]"
     return "Z [Pa·s/m]"
 
 
