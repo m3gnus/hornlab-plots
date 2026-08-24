@@ -36,6 +36,8 @@ complex-pressure contract):
   (``interference_ratio_db`` exposes the underlying math).
 - ``save_directivity_power_plot(output_path, freqs, di_db, power_db, ...)``
   — DI + power response on twin axes.
+- ``sphere_power_metrics(pressure, theta_deg, phi_deg, ...)`` — full-sphere
+  solid-angle integration of a solved pressure balloon.
 - ``save_beamwidth_plot(output_path, freqs, beamwidths_deg, ...)`` —
   -6 dB beamwidth vs frequency per plane.
 - ``save_group_delay_plot(output_path, freqs, group_delay_s, ...)`` —
@@ -89,12 +91,15 @@ from ._polar import (
     save_polar_line_plot,
 )
 from .derived import (
+    FULL_SPHERE_POWER_NOTE,
+    POLAR_POWER_APPROXIMATION_NOTE,
     interference_ratio_db,
     save_beamwidth_plot,
     save_directivity_power_plot,
     save_excursion_plot,
     save_group_delay_plot,
     save_interference_heatmap,
+    sphere_power_metrics,
 )
 from .style import (
     ABYSS_THEME,
@@ -143,6 +148,9 @@ __all__ = [
     "set_spl_window",
     "spl_window",
     # Derived-output renderers (Fusion addin ports)
+    "FULL_SPHERE_POWER_NOTE",
+    "POLAR_POWER_APPROXIMATION_NOTE",
+    "sphere_power_metrics",
     "interference_ratio_db",
     "save_interference_heatmap",
     "save_directivity_power_plot",

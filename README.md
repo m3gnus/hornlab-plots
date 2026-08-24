@@ -79,6 +79,12 @@ hlp.save_interference_heatmap(path, freqs, {"MF": p_mf, "HF": p_hf},
                               angles_deg, ("horizontal", "vertical"),
                               crossovers_hz=[900.0])
 hlp.save_directivity_power_plot(path, freqs, di_db, power_response_db)
+metrics = hlp.sphere_power_metrics(
+    sphere_pressure_complex,
+    sphere_theta_deg,
+    sphere_phi_deg,
+    distance_m=2.0,
+)
 hlp.save_beamwidth_plot(path, freqs, {"horizontal": bw_h, "vertical": bw_v})
 hlp.save_group_delay_plot(path, freqs, group_delay_s)
 hlp.save_excursion_plot(path, freqs, excursion_m, label="MF", xmax_m=3.5e-3)
