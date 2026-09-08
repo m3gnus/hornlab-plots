@@ -7,6 +7,7 @@ import hornlab_plots.complex_analysis as complex_analysis
 from hornlab_plots.complex_analysis import (
     _di_from_magnitude,
     _patterns_to_complex,
+    _polar_cut_measure,
     _pressure_at_angle,
     _propagation_phase,
     _resample_frequency_onto,
@@ -271,3 +272,111 @@ def test_impulse_response_is_invariant_to_frequency_order(monkeypatch):
 
     np.testing.assert_array_equal(captured[0][0], captured[1][0])
     np.testing.assert_allclose(captured[0][1], captured[1][1])
+
+
+# ---------------------------------------------------------------------------
+# Polar-cut DI proxy: nonnegative solid-angle weights (signed angle axes)
+# ---------------------------------------------------------------------------
+
+
+def test_polar_cut_weights_are_nonnegative_on_a_signed_axis():
+    theta = np.linspace(-90.0, 90.0, 37)
+
+    _, _, weights, norm = _polar_cut_measure(theta)
+
+    assert np.all(weights >= 0.0)
+    assert norm > 0.0
+    # |sin| over -90..+90 deg is the two half-cuts, so the measure is twice
+    # the one-sided integral of sin over 0..90 deg, which is exactly 1.
+    np.testing.assert_allclose(norm, 2.0, rtol=1.0e-3)
+
+
+def test_uniform_field_gives_zero_di_on_unsigned_and_signed_axes():
+    for theta in (np.linspace(0.0, 180.0, 721), np.linspace(-90.0, 90.0, 361)):
+        pressure = np.ones((2, theta.size), dtype=np.complex128)
+
+        di = _di_from_magnitude(pressure, theta)
+
+        assert np.all(np.isfinite(di))
+        np.testing.assert_allclose(di, 0.0, atol=1.0e-12)
+
+
+def test_axisymmetric_cosine_cut_matches_the_analytic_dipole_di():
+    # An axisymmetric cos(theta) pattern has mean power 1/3 over the sphere,
+    # so its directivity index is exactly 10*log10(3).
+    theta = np.linspace(0.0, 180.0, 1441)
+    pressure = np.cos(np.deg2rad(theta))[None, :].astype(np.complex128)
+
+    di = _di_from_magnitude(pressure, theta)
+
+    np.testing.assert_allclose(di, 10.0 * np.log10(3.0), atol=1.0e-4)
+
+
+def test_signed_axis_di_matches_the_unsigned_equivalent_for_a_symmetric_cut():
+    signed = np.linspace(-90.0, 90.0, 361)
+    unsigned = np.linspace(0.0, 90.0, 181)
+    pattern = lambda t: (0.2 + np.cos(np.deg2rad(t)) ** 2)  # noqa: E731
+
+    di_signed = _di_from_magnitude(
+        pattern(signed)[None, :].astype(np.complex128), signed
+    )
+    di_unsigned = _di_from_magnitude(
+        pattern(unsigned)[None, :].astype(np.complex128), unsigned
+    )
+
+    np.testing.assert_allclose(di_signed, di_unsigned, atol=1.0e-12)
+
+
+def test_asymmetric_signed_cut_folds_both_sides_instead_of_cancelling():
+    theta = np.linspace(-90.0, 90.0, 361)
+    # Deliberately asymmetric about 0 deg: with sin(theta) weights the two
+    # sides annihilate each other, so this is the case that used to go NaN.
+    amplitude = 1.0 + 0.6 * np.sin(np.deg2rad(theta)) + 0.3 * np.deg2rad(theta) ** 2
+    pressure = amplitude[None, :].astype(np.complex128)
+
+    di = _di_from_magnitude(pressure, theta)
+
+    assert np.all(np.isfinite(di))
+
+    # Independent derivation: average the two half-cuts' linear powers, then
+    # integrate the folded cut over the unsigned 0..90 deg axis.
+    middle = theta.size // 2
+    power = np.abs(pressure) ** 2
+    folded_power = 0.5 * (power[:, middle:] + power[:, middle::-1])
+    di_folded = _di_from_magnitude(
+        np.sqrt(folded_power).astype(np.complex128), theta[middle:]
+    )
+
+    np.testing.assert_allclose(di, di_folded, atol=1.0e-12)
+
+
+def test_di_proxy_rejects_unusable_angle_axes():
+    pressure = np.ones((1, 4), dtype=np.complex128)
+    with pytest.raises(ValueError, match="strictly monotonic"):
+        _di_from_magnitude(pressure, np.array([0.0, 30.0, 20.0, 60.0]))
+    with pytest.raises(ValueError, match="within -180..180 deg"):
+        _di_from_magnitude(pressure, np.array([0.0, 90.0, 180.0, 270.0]))
+    with pytest.raises(ValueError, match="at least two samples"):
+        _di_from_magnitude(np.ones((1, 1), dtype=np.complex128), np.array([0.0]))
+    with pytest.raises(ValueError, match="span no solid angle"):
+        _di_from_magnitude(
+            np.ones((1, 2), dtype=np.complex128), np.array([0.0, 180.0])
+        )
+
+
+def test_di_plot_renders_a_finite_curve_for_a_signed_angle_dataset(tmp_path):
+    freqs = np.array([500.0, 1000.0, 2000.0])
+    theta = np.linspace(-90.0, 90.0, 37)
+    pattern = np.cos(np.deg2rad(theta)) ** 2 + 0.1
+    pressure = np.broadcast_to(pattern[None, :], (freqs.size, theta.size))
+    source = complex_analysis.ComplexDirectivity(
+        freqs,
+        theta,
+        pressure.astype(np.complex128),
+        None,
+    )
+
+    complex_analysis.plot_di_coherent_vs_mag(source, tmp_path / "signed_di.png")
+
+    di = _di_from_magnitude(source.p_h, source.theta)
+    assert np.all(np.isfinite(di))

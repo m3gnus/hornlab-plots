@@ -54,6 +54,11 @@ except ImportError:  # pragma: no cover - direct ``python complex_analysis.py`` 
 
 _trapz = getattr(np, "trapezoid", None) or np.trapz
 
+# Slack allowed when checking that an angle axis stays inside its domain.
+_ANGLE_TOLERANCE_DEG = 1.0e-6
+# Smallest polar-cut angular measure treated as a real integration domain.
+_MEASURE_FLOOR_SR = 1.0e-12
+
 C_AIR = 343.0
 
 
@@ -568,25 +573,73 @@ def plot_acoustic_centre(d: ComplexDirectivity, out: Path,
 # Plot 6: H-plane vs V-plane DI proxy
 # ---------------------------------------------------------------------------
 
-def _di_from_magnitude(p: np.ndarray, theta_deg: np.ndarray,
-                       hemisphere: bool = True) -> np.ndarray:
+def _polar_cut_measure(
+    theta_deg: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """Return ``(theta_deg, theta_rad, weights, norm)`` for a polar cut.
+
+    ``weights`` is the axisymmetric angular measure ``|sin(theta)|``, never
+    ``sin(theta)``. Revolving a cut about the axis weights each sample by the
+    sine of its *polar* angle ``|theta|``, so every weight is nonnegative by
+    construction and a signed cut such as -90..+90 deg is the two half-cuts
+    folded together: both sides contribute nonnegative weight and their linear
+    powers are averaged, so a symmetric pattern reproduces the one-sided
+    0..90 deg answer exactly. Plain ``sin(theta)`` instead lets the negative
+    side cancel the positive one, which collapses the normalisation to zero
+    and yields NaN or an enormous spurious result on any symmetric signed grid.
+
+    ``norm`` is the absolute value of the measure's integral, so a descending
+    angle axis covers the same domain as an ascending one. The integrand is
+    nonnegative everywhere, so taking the absolute value only removes the axis
+    orientation and can never hide a cancellation.
+    """
+    theta_deg = np.asarray(theta_deg, dtype=np.float64)
+    if theta_deg.ndim != 1 or theta_deg.size < 2 or not np.all(np.isfinite(theta_deg)):
+        raise ValueError(
+            "polar-cut angles must be a finite 1-D array of at least two samples"
+        )
+    steps = np.diff(theta_deg)
+    if not (np.all(steps > 0.0) or np.all(steps < 0.0)):
+        raise ValueError("polar-cut angles must be strictly monotonic")
+    if (
+        float(np.min(theta_deg)) < -180.0 - _ANGLE_TOLERANCE_DEG
+        or float(np.max(theta_deg)) > 180.0 + _ANGLE_TOLERANCE_DEG
+    ):
+        raise ValueError("polar-cut angles must lie within -180..180 deg")
+
+    theta = np.deg2rad(theta_deg)
+    weights = np.abs(np.sin(theta))
+    norm = abs(float(_trapz(weights, theta)))
+    # A cut sampled only at the poles integrates to rounding noise rather than
+    # to an exact zero, so the floor is absolute rather than a > 0.0 test.
+    if not np.isfinite(norm) or norm <= _MEASURE_FLOOR_SR:
+        raise ValueError(
+            "polar-cut angles span no solid angle; the cut must cover angles "
+            "away from the poles"
+        )
+    return theta_deg, theta, weights, norm
+
+
+def _di_from_magnitude(p: np.ndarray, theta_deg: np.ndarray) -> np.ndarray:
     """Plane-derived DI proxy from |p|^2.
 
     Assumes the selected polar cut can stand in for an axisymmetric sphere:
-    mean power = integral(|p(theta)|^2 sin(theta) dtheta) /
-    integral(sin(theta) dtheta). Comparing H and V exposes how weak that
+    mean power = integral(|p(theta)|^2 |sin(theta)| dtheta) /
+    integral(|sin(theta)| dtheta). Comparing H and V exposes how weak that
     assumption is for asymmetric horns.
+
+    The nonnegative angular measure, and why a signed cut needs it, are
+    described on :func:`_polar_cut_measure`.
     """
-    theta = np.deg2rad(theta_deg)
-    sin_t = np.sin(theta)
+    theta_deg, theta, weight, norm = _polar_cut_measure(theta_deg)
+
     p2 = np.abs(p)
     np.square(p2, out=p2)
     onaxis_idx = int(np.argmin(np.abs(theta_deg)))
     on_axis = p2[:, onaxis_idx].copy()
-    p2 = p2.astype(np.result_type(p2.dtype, sin_t.dtype), copy=False)
-    np.multiply(p2, sin_t[None, :], out=p2)
-    norm = max(float(_trapz(sin_t, theta)), 1e-30)
-    mean = _trapz(p2, theta, axis=1) / norm
+    p2 = p2.astype(np.result_type(p2.dtype, weight.dtype), copy=False)
+    np.multiply(p2, weight[None, :], out=p2)
+    mean = np.abs(_trapz(p2, theta, axis=1)) / norm
     with np.errstate(divide="ignore", invalid="ignore"):
         return 10.0 * np.log10((on_axis + 1e-30) / (mean + 1e-30))
 
