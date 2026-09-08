@@ -36,8 +36,11 @@ complex-pressure contract):
   (``interference_ratio_db`` exposes the underlying math).
 - ``save_directivity_power_plot(output_path, freqs, di_db, power_db, ...)``
   — DI + power response on twin axes.
-- ``sphere_power_metrics(pressure, theta_deg, phi_deg, ...)`` — full-sphere
-  solid-angle integration of a solved pressure balloon.
+- ``sphere_power_metrics(pressure, theta_deg, phi_deg, ...)`` — solid-angle
+  integration of a solved pressure balloon over a hemisphere (theta ending at
+  90 deg) or a full sphere (180 deg). A theta axis ending anywhere else is a
+  partial cap and is refused; pass ``cap_theta_max_deg`` to declare that cap's
+  coverage and integrate it over its own solid angle.
 - ``save_beamwidth_plot(output_path, freqs, beamwidths_deg, ...)`` —
   -6 dB beamwidth vs frequency per plane.
 - ``save_group_delay_plot(output_path, freqs, group_delay_s, ...)`` —
@@ -92,6 +95,7 @@ from ._polar import (
 )
 from .derived import (
     FULL_SPHERE_POWER_NOTE,
+    PARTIAL_CAP_POWER_NOTE,
     POLAR_POWER_APPROXIMATION_NOTE,
     interference_ratio_db,
     save_beamwidth_plot,
@@ -149,6 +153,7 @@ __all__ = [
     "spl_window",
     # Derived-output renderers (Fusion addin ports)
     "FULL_SPHERE_POWER_NOTE",
+    "PARTIAL_CAP_POWER_NOTE",
     "POLAR_POWER_APPROXIMATION_NOTE",
     "sphere_power_metrics",
     "interference_ratio_db",

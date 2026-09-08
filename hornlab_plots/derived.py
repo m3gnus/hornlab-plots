@@ -51,9 +51,16 @@ FULL_SPHERE_POWER_NOTE = (
     "Full-sphere integration of the solved balloon: intensity is solid-angle "
     "weighted over n_theta x n_phi directions."
 )
+PARTIAL_CAP_POWER_NOTE = (
+    "Partial-cap integration of the solved balloon: intensity is solid-angle "
+    "weighted over the declared cap only, and directions outside the cap are "
+    "treated as silent; this is not a full-sphere integration."
+)
 BEAMWIDTH_SYMMETRY_NOTE = (
     "One-sided angle grid: -6 dB beamwidth assumes symmetry about 0 deg."
 )
+# Slack allowed when matching a sphere grid's angles against a declared bound.
+_SPHERE_ANGLE_TOLERANCE_DEG = 1.0e-6
 
 
 def _sphere_grid_from_pressure(pressure_complex, theta_deg, phi_deg):
@@ -111,12 +118,41 @@ def _sphere_grid_from_pressure(pressure_complex, theta_deg, phi_deg):
     return gridded, theta_axis, phi_axis
 
 
-def _sphere_cell_weights_sr(theta_deg, phi_deg):
+def _cap_coverage_fraction(theta_upper_deg):
+    """Share of the whole sphere a cap of half-angle ``theta_upper_deg`` covers.
+
+    A cap of half-angle t subtends ``2*pi*(1 - cos(t))`` sr, so its share of
+    the sphere is ``(1 - cos(t)) / 2``. The two canonical endpoints are
+    returned exactly rather than through ``cos``, whose rounding at 90 deg
+    would otherwise make a hemisphere report 0.49999999999999994.
+    """
+    upper = float(theta_upper_deg)
+    if abs(upper - 180.0) <= _SPHERE_ANGLE_TOLERANCE_DEG:
+        return 1.0
+    if abs(upper - 90.0) <= _SPHERE_ANGLE_TOLERANCE_DEG:
+        return 0.5
+    return float(0.5 * (1.0 - np.cos(np.deg2rad(upper))))
+
+
+def _sphere_cell_weights_sr(theta_deg, phi_deg, *, cap_theta_max_deg=None):
     """Return cell solid angles and represented fraction for a sphere grid.
 
     Counterpart: Waveguide Generator's ``server/solver/directivity_index.py``.
     Both implementations use midpoint theta bands with cosine-edge areas and
-    periodic midpoint widths in phi.
+    periodic midpoint widths in phi, and both require the theta axis to end at
+    the coverage it claims rather than inferring one.
+
+    By default only a hemisphere (theta ending at 90 deg) or a full sphere
+    (theta ending at 180 deg) is accepted, and the final band closes on that
+    endpoint. A theta axis ending anywhere else samples a partial cap, whose
+    coverage cannot be derived from the samples alone, so it is refused.
+
+    ``cap_theta_max_deg`` is the explicit opt-in for such a cap. It must equal
+    the last theta sample; the final band then closes on that endpoint and the
+    represented fraction is the cap's true share of the sphere,
+    ``(1 - cos(theta_max)) / 2``. Passing it asserts that the cap boundary is
+    where the caller says it is; it never extrapolates the sampled pattern
+    into the unsampled remainder.
     """
     theta = np.asarray(theta_deg, dtype=np.float64)
     phi = np.asarray(phi_deg, dtype=np.float64)
@@ -142,8 +178,40 @@ def _sphere_cell_weights_sr(theta_deg, phi_deg):
             "in [0, 360) without a wrap duplicate"
         )
 
-    hemisphere = float(theta[-1]) <= 90.0 + 1.0e-6
-    theta_upper_deg = 90.0 if hemisphere else 180.0
+    theta_last_deg = float(theta[-1])
+    if cap_theta_max_deg is None:
+        # No coverage was declared, so only the two endpoints that state their
+        # own coverage are accepted. Never widen the final band past the last
+        # sample: that invents radiation in directions nobody solved for.
+        if abs(theta_last_deg - 90.0) <= _SPHERE_ANGLE_TOLERANCE_DEG:
+            theta_upper_deg = 90.0
+        elif abs(theta_last_deg - 180.0) <= _SPHERE_ANGLE_TOLERANCE_DEG:
+            theta_upper_deg = 180.0
+        else:
+            raise ValueError(
+                "sphere theta axis must end at 90 deg (hemisphere) or 180 deg "
+                f"(full sphere); it ends at {theta_last_deg:g} deg. Pass "
+                "cap_theta_max_deg to integrate that partial cap explicitly, "
+                "which reports the cap's own coverage instead of a "
+                "hemisphere's or a full sphere's."
+            )
+    else:
+        cap_upper_deg = float(cap_theta_max_deg)
+        if (
+            not np.isfinite(cap_upper_deg)
+            or cap_upper_deg <= 0.0
+            or cap_upper_deg > 180.0 + _SPHERE_ANGLE_TOLERANCE_DEG
+        ):
+            raise ValueError(
+                "cap_theta_max_deg must be finite and within (0, 180] deg"
+            )
+        if abs(cap_upper_deg - theta_last_deg) > _SPHERE_ANGLE_TOLERANCE_DEG:
+            raise ValueError(
+                f"cap_theta_max_deg {cap_upper_deg:g} deg must equal the last "
+                f"theta sample {theta_last_deg:g} deg; the cap is only "
+                "integrated over directions that were actually sampled"
+            )
+        theta_upper_deg = cap_upper_deg
     theta_edges_deg = np.empty(theta.size + 1, dtype=np.float64)
     theta_edges_deg[0] = 0.0
     theta_edges_deg[-1] = theta_upper_deg
@@ -162,8 +230,7 @@ def _sphere_cell_weights_sr(theta_deg, phi_deg):
         raise ValueError("phi samples do not define positive periodic cells")
 
     weights_sr = theta_band_weights[:, None] * phi_widths_rad[None, :]
-    represented_fraction = 0.5 if hemisphere else 1.0
-    return weights_sr, represented_fraction
+    return weights_sr, _cap_coverage_fraction(theta_upper_deg)
 
 
 def sphere_power_metrics(
@@ -175,15 +242,30 @@ def sphere_power_metrics(
     rho=1.2041,
     c=343.0,
     p_ref=20.0e-6,
+    cap_theta_max_deg=None,
 ):
     """Integrate DI and acoustic power from a solved spherical pressure grid.
 
     ``pressure_complex`` accepts metal-bem's flat ``(n_freq, n_direction)``
     balloon with equally flat theta/phi arrays, or a gridded
-    ``(n_freq, n_theta, n_phi)`` array with 1-D axes. A grid ending at or
-    before 90 degrees represents a hemisphere: its power is integrated over
-    2*pi sr and the missing rear hemisphere is treated as silent for DI and
-    the full-sphere spatial average.
+    ``(n_freq, n_theta, n_phi)`` array with 1-D axes.
+
+    The theta axis must end at 90 degrees (a hemisphere, integrated over
+    2*pi sr) or at 180 degrees (a full sphere). A grid ending anywhere else
+    samples a partial cap and is **refused**, because nothing in the samples
+    says how much of the sphere the caller believes that cap covers.
+
+    ``cap_theta_max_deg`` is the explicit opt-in for a partial cap. It must
+    equal the last theta sample, and it declares that the solved cap ends
+    exactly there. Power is then integrated over the cap's own solid angle,
+    ``2*pi*(1 - cos(theta_max))`` sr, and ``solid_angle_coverage_fraction``
+    reports that cap's true share of the sphere. The sampled pattern is never
+    extended into the unsampled remainder.
+
+    For every coverage below a full sphere the unsampled remainder is treated
+    as **silent** in the directivity index and in the full-sphere spatial
+    average; the reported spatial average and power response still describe
+    the sampled region only.
     """
     distance = float(distance_m)
     density = float(rho)
@@ -205,18 +287,31 @@ def sphere_power_metrics(
     )
     if pressure.shape[0] == 0 or not np.all(np.isfinite(pressure)):
         raise ValueError("sphere pressure must contain finite frequency rows")
-    weights_sr, represented_fraction = _sphere_cell_weights_sr(theta, phi)
+    weights_sr, represented_fraction = _sphere_cell_weights_sr(
+        theta,
+        phi,
+        cap_theta_max_deg=cap_theta_max_deg,
+    )
     solid_angle_sum = float(np.sum(weights_sr))
     expected_solid_angle = 4.0 * np.pi * represented_fraction
     if not np.isclose(solid_angle_sum, expected_solid_angle, rtol=1.0e-12, atol=1.0e-12):
         raise ValueError("sphere solid-angle weights do not match represented coverage")
 
+    # A declared cap narrower than a hemisphere is not a hemisphere and must
+    # not be described as a full-sphere integration.
+    coverage_note = (
+        PARTIAL_CAP_POWER_NOTE
+        if cap_theta_max_deg is not None and represented_fraction < 0.5
+        else FULL_SPHERE_POWER_NOTE
+    )
+
     intensity = np.abs(pressure) ** 2 / (2.0 * density * sound_speed)
     integrated_intensity = np.sum(intensity * weights_sr[None, :, :], axis=(1, 2))
     spatial_average_intensity = integrated_intensity / solid_angle_sum
     # Only DI expands the represented-domain average over the complete sphere.
-    # For a hemisphere, its absent rear half is silent; reported spatial
-    # average and power response still describe the sampled hemisphere.
+    # Whatever the grid does not sample -- a hemisphere's rear half, or the
+    # remainder outside an explicitly declared cap -- is silent; reported
+    # spatial average and power response still describe the sampled region.
     directivity_average_intensity = (
         spatial_average_intensity * represented_fraction
     )
@@ -250,8 +345,8 @@ def sphere_power_metrics(
         "sphere_theta_deg": theta,
         "sphere_phi_deg": phi,
         "sphere_weights_sr": weights_sr,
-        "approximation": FULL_SPHERE_POWER_NOTE,
-        "method": FULL_SPHERE_POWER_NOTE,
+        "approximation": coverage_note,
+        "method": coverage_note,
     }
 
 
@@ -985,6 +1080,7 @@ def save_excursion_plot(
 __all__ = [
     "POLAR_POWER_APPROXIMATION_NOTE",
     "FULL_SPHERE_POWER_NOTE",
+    "PARTIAL_CAP_POWER_NOTE",
     "BEAMWIDTH_SYMMETRY_NOTE",
     "sphere_power_metrics",
     "interference_ratio_db",
