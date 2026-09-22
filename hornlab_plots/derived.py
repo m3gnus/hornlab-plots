@@ -1,12 +1,12 @@
-"""Derived-output renderers promoted from the Fusion addin solve script.
+"""Derived-output renderers ported from the frozen legacy standalone app.
 
-Faithful ports of the ``solve_fusion_wg_metal.py`` derived renderers — the
+Faithful ports of its derived renderers — the
 driver-interference heatmap, the directivity-index + power-response chart,
 the -6 dB beamwidth chart, the on-axis group-delay chart, and the cone
 excursion chart with its Xmax marker. Package style: data in, path out,
 optional ``theme``/``colors`` overrides, mesh-valid marker options where the
-addin originals support them. The math and matplotlib styling match the
-addin originals exactly.
+legacy originals support them. The math and matplotlib styling match the
+legacy originals exactly.
 
 Complex-pressure contract: ``save_interference_heatmap`` /
 ``interference_ratio_db`` accept complex far-field pressure grids in the
@@ -40,7 +40,7 @@ from .style import (
     theme_rc_context,
 )
 
-# Footnote texts carried verbatim from the addin so rendered wording stays
+# Footnote texts carried verbatim from the legacy app so rendered wording stays
 # identical across the call-site swap.
 POLAR_POWER_APPROXIMATION_NOTE = (
     "Polar-cut estimate: intensity is averaged over the stored planes at each "
