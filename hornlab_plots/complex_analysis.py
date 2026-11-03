@@ -518,8 +518,21 @@ def plot_phase_polar(d: ComplexDirectivity, out: Path,
         ):
             phi = _relative_angular_phase(p[idx], onaxis_idx)
             phi_deg = np.rad2deg(phi)
-            t_full = np.concatenate([-d.theta[::-1], d.theta])
-            phi_full = np.concatenate([phi_deg[::-1], phi_deg])
+            if np.any(d.theta < 0) and np.any(d.theta > 0):
+                t_full, phi_full = d.theta, phi_deg
+            else:
+                # A one-sided cut assumes symmetry; zero is shared by both sides.
+                order = np.argsort(d.theta)
+                theta, phi_deg = d.theta[order], phi_deg[order]
+                nonzero = theta != 0
+                mirrored_theta = -theta[nonzero][::-1]
+                mirrored_phase = phi_deg[nonzero][::-1]
+                if np.any(theta < 0):
+                    t_full = np.concatenate([theta, mirrored_theta])
+                    phi_full = np.concatenate([phi_deg, mirrored_phase])
+                else:
+                    t_full = np.concatenate([mirrored_theta, theta])
+                    phi_full = np.concatenate([mirrored_phase, phi_deg])
             ax.plot(np.deg2rad(t_full), phi_full, lw=1.6, color=color, label=name)
         ax.set_theta_zero_location("N")
         ax.set_theta_direction(-1)

@@ -140,6 +140,17 @@ def _safe_float(value):
 # Heatmap data prep
 # ---------------------------------------------------------------------------
 
+def _display_limits(display_range_db):
+    """Validate the shared preparation and colour-scale limits."""
+    limits = np.asarray(display_range_db, dtype=float)
+    if limits.shape != (2,) or not np.all(np.isfinite(limits)) or limits[0] >= limits[1]:
+        raise ValueError(
+            "display_range_db must contain two finite dB levels in increasing "
+            "order, for example (-60, 0)"
+        )
+    return float(limits[0]), float(limits[1])
+
+
 def prepare_heatmap_data(
     angles,
     freqs,
@@ -147,12 +158,14 @@ def prepare_heatmap_data(
     *,
     smooth=False,
     smoothing_fraction=FRACTIONAL_OCTAVE,
+    display_range_db=(MIN_DB, MAX_DB),
 ):
     """Fill gaps, interpolate to the canonical grid, optionally smooth, and clip.
 
     Smoothing is disabled by default. Set ``smooth=True`` to apply an
     equal-weight fractional-octave mean on the canonical log-frequency grid;
     ``smoothing_fraction`` is the denominator and defaults to 24 (1/24 octave).
+    ``display_range_db`` sets the clipping limits, defaulting to (-30, 0).
 
     Disabling the former raw-grid default is deliberately observable only on
     unusually dense inputs. For the measured 300--20,000 Hz probe, smoothing
@@ -160,6 +173,7 @@ def prepare_heatmap_data(
     changed the prepared output for that 3 x 292 input by at most
     0.08757903106719134 dB. A realistic 56-point grid was bit-for-bit unchanged.
     """
+    min_db, max_db = _display_limits(display_range_db)
     angles = np.asarray(angles, dtype=float)
     freqs = np.asarray(freqs, dtype=float)
     values = np.asarray(values, dtype=float)
@@ -170,7 +184,7 @@ def prepare_heatmap_data(
     freqs = freqs[frequency_order]
     values = values[np.ix_(angle_order, frequency_order)]
 
-    values_filled = _fill_missing_values(values, angles, freqs)
+    values_filled = _fill_missing_values(values, angles, freqs, min_db=min_db)
     interp_angles, interp_freqs, interp_values = _interpolate_heatmap_grid(
         angles, freqs, values_filled, ANGLE_SAMPLES, FREQ_SAMPLES
     )
@@ -180,10 +194,10 @@ def prepare_heatmap_data(
             interp_freqs,
             smoothing_fraction,
         )
-    return interp_angles, interp_freqs, np.clip(interp_values, MIN_DB, MAX_DB)
+    return interp_angles, interp_freqs, np.clip(interp_values, min_db, max_db)
 
 
-def _fill_missing_values(values, angles, freqs):
+def _fill_missing_values(values, angles, freqs, *, min_db=MIN_DB):
     filled = np.array(values, dtype=float, copy=True)
 
     # Fill missing values along angle for each frequency.
@@ -207,7 +221,7 @@ def _fill_missing_values(values, angles, freqs):
         if np.all(finite):
             continue
         if np.count_nonzero(finite) == 0:
-            filled[row, :] = MIN_DB
+            filled[row, :] = min_db
             continue
         if np.count_nonzero(finite) == 1:
             filled[row, :] = y[finite][0]
@@ -218,7 +232,7 @@ def _fill_missing_values(values, angles, freqs):
                 y[finite],
             )
 
-    filled[~np.isfinite(filled)] = MIN_DB
+    filled[~np.isfinite(filled)] = min_db
     return filled
 
 
@@ -376,6 +390,7 @@ def render_single_heatmap(
     *,
     theme=None,
     colors=None,
+    display_range_db=(MIN_DB, MAX_DB),
 ):
     """Render a single directivity heatmap onto the given matplotlib Axes.
 
@@ -387,7 +402,9 @@ def render_single_heatmap(
     ``mesh_valid_hz`` (solid) is the conservative fully-resolved frequency and
     ``mesh_valid_radiating_hz`` (dashed) the radiating-aperture frequency;
     results to the right of each are increasingly under-resolved.
+    Use the same ``display_range_db`` limits as in ``prepare_heatmap_data``.
     """
+    min_db, max_db = _display_limits(display_range_db)
     theme_obj = apply_theme_overrides(theme, colors=colors)
     ax.set_facecolor(theme_obj.axes_bg)
 
@@ -417,8 +434,8 @@ def render_single_heatmap(
         angle_edges,
         values,
         cmap=theme_obj.heatmap_cmap,
-        vmin=MIN_DB,
-        vmax=MAX_DB,
+        vmin=min_db,
+        vmax=max_db,
         shading="flat",
     )
 
@@ -573,6 +590,7 @@ def _build_planes_from_legacy(
     *,
     smooth=False,
     smoothing_fraction=FRACTIONAL_OCTAVE,
+    display_range_db=(MIN_DB, MAX_DB),
 ):
     """Convert WG-shaped ``{"horizontal": [[[angle, db], ...], ...], ...}``
     payload into the list-of-dicts shape used by the composite renderer."""
@@ -594,6 +612,7 @@ def _build_planes_from_legacy(
             values_raw,
             smooth=smooth,
             smoothing_fraction=smoothing_fraction,
+            display_range_db=display_range_db,
         )
         planes.append({
             "key": key,
@@ -609,7 +628,8 @@ def _build_planes_from_legacy(
 
 def _build_figure_from_planes(
     planes, reference_level=-6.0, mesh_valid_hz=None, mesh_valid_radiating_hz=None,
-    *, theme=None, colors=None, reference_planes=None, reference_label=None
+    *, theme=None, colors=None, reference_planes=None, reference_label=None,
+    display_range_db=(MIN_DB, MAX_DB),
 ):
     """Render planes into a matplotlib figure and return it.
 
@@ -665,6 +685,7 @@ def _build_figure_from_planes(
                 mesh_valid_hz=mesh_valid_hz,
                 mesh_valid_radiating_hz=mesh_valid_radiating_hz,
                 theme=theme_obj,
+                display_range_db=display_range_db,
             )
             reference_drawn = False
             if reference_by_key:
@@ -718,6 +739,7 @@ def directivity_heatmap_from_legacy_dict(
     reference_label=None,
     smooth=False,
     smoothing_fraction=FRACTIONAL_OCTAVE,
+    display_range_db=(MIN_DB, MAX_DB),
 ):
     """Render directivity heatmap(s) and return base64-encoded PNG (no prefix).
 
@@ -732,6 +754,8 @@ def directivity_heatmap_from_legacy_dict(
     ``render_directivity_plot`` entry point. Smoothing is off by default; pass
     ``smooth=True`` to use 1/24-octave smoothing, or also set
     ``smoothing_fraction`` to choose another denominator.
+    ``display_range_db`` controls clipping and the colour scale independently
+    of the contour; pass ``(reference_level * 5, 0)`` to match WG's map depth.
 
     Returns None when there are no plottable patterns.
     """
@@ -740,6 +764,7 @@ def directivity_heatmap_from_legacy_dict(
         directivity,
         smooth=smooth,
         smoothing_fraction=smoothing_fraction,
+        display_range_db=display_range_db,
     )
     if not planes:
         return None
@@ -751,6 +776,7 @@ def directivity_heatmap_from_legacy_dict(
             reference_directivity,
             smooth=smooth,
             smoothing_fraction=smoothing_fraction,
+            display_range_db=display_range_db,
         )
 
     theme_obj = apply_theme_overrides(theme, colors=colors)
@@ -760,6 +786,7 @@ def directivity_heatmap_from_legacy_dict(
         theme=theme_obj,
         reference_planes=reference_planes,
         reference_label=reference_label,
+        display_range_db=display_range_db,
     )
 
     buf = io.BytesIO()
@@ -789,6 +816,7 @@ def save_directivity_plot(
     colors=None,
     smooth=False,
     smoothing_fraction=FRACTIONAL_OCTAVE,
+    display_range_db=(MIN_DB, MAX_DB),
 ):
     """Render directivity heatmap(s) and save to ``output_path`` (PNG).
 
@@ -798,12 +826,15 @@ def save_directivity_plot(
     Smoothing is off by default; pass ``smooth=True`` to use 1/24-octave
     smoothing, or also set ``smoothing_fraction`` to choose another
     denominator.
+    ``display_range_db`` sets both the clipping and colour-scale limits,
+    defaulting to (-30, 0).
     """
     planes = _build_planes_from_legacy(
         frequencies,
         directivity,
         smooth=smooth,
         smoothing_fraction=smoothing_fraction,
+        display_range_db=display_range_db,
     )
     if not planes:
         return None
@@ -815,6 +846,7 @@ def save_directivity_plot(
         mesh_valid_hz=mesh_valid_hz,
         mesh_valid_radiating_hz=mesh_valid_radiating_hz,
         theme=theme_obj,
+        display_range_db=display_range_db,
     )
 
     out = Path(output_path)
@@ -847,6 +879,7 @@ def directivity_heatmap_b64(
     colors=None,
     smooth=False,
     smoothing_fraction=FRACTIONAL_OCTAVE,
+    display_range_db=(MIN_DB, MAX_DB),
 ):
     """Render a single directivity heatmap and return base64 PNG (no prefix).
 
@@ -856,6 +889,7 @@ def directivity_heatmap_b64(
         spl_db: 2D array, ``(n_angle, n_freq)``, already normalized.
         title: Plot title. Defaults to "Normalized Directivity".
         reference_level: dB level for prominent contour (default -6).
+        display_range_db: Clipping and colour-scale limits (default (-30, 0)).
         smooth: Apply fractional-octave smoothing after canonical interpolation.
         smoothing_fraction: Fractional-octave denominator (default 24).
 
@@ -876,6 +910,7 @@ def directivity_heatmap_b64(
         values_raw,
         smooth=smooth,
         smoothing_fraction=smoothing_fraction,
+        display_range_db=display_range_db,
     )
 
     with theme_rc_context(theme_obj):
@@ -889,6 +924,7 @@ def directivity_heatmap_b64(
             title or "Normalized Directivity",
             reference_level=reference_level,
             theme=theme_obj,
+            display_range_db=display_range_db,
         )
         fig.tight_layout(pad=1.5)
 

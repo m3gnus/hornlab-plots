@@ -53,7 +53,7 @@ FULL_SPHERE_POWER_NOTE = (
 )
 PARTIAL_CAP_POWER_NOTE = (
     "Partial-cap integration of the solved balloon: intensity is solid-angle "
-    "weighted over the declared cap only, and directions outside the cap are "
+    "weighted over the sampled cap only, and directions outside the cap are "
     "treated as silent; this is not a full-sphere integration."
 )
 BEAMWIDTH_SYMMETRY_NOTE = (
@@ -297,11 +297,10 @@ def sphere_power_metrics(
     if not np.isclose(solid_angle_sum, expected_solid_angle, rtol=1.0e-12, atol=1.0e-12):
         raise ValueError("sphere solid-angle weights do not match represented coverage")
 
-    # A declared cap narrower than a hemisphere is not a hemisphere and must
-    # not be described as a full-sphere integration.
+    # Any unsampled remainder is silent, including the rear of a hemisphere.
     coverage_note = (
         PARTIAL_CAP_POWER_NOTE
-        if cap_theta_max_deg is not None and represented_fraction < 0.5
+        if represented_fraction < 1.0
         else FULL_SPHERE_POWER_NOTE
     )
 

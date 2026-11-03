@@ -39,6 +39,7 @@ b64 = hlp.directivity_heatmap_from_legacy_dict(
     frequencies=[1000, 2000, 4000],
     directivity={"horizontal": [...], "vertical": [...]},
     reference_level=-6.0,
+    display_range_db=(-30.0, 0.0),  # default clipping and colour-scale limits
     smooth=True,                 # opt in; omitted means no smoothing
     smoothing_fraction=24.0,    # 1/24 octave; choose another denominator
 )

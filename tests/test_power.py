@@ -178,7 +178,10 @@ def test_full_cap_endpoints_are_still_accepted(theta_max):
         4.0 * np.pi * expected_fraction,
         rtol=1.0e-12,
     )
-    assert metrics["method"] == hlp.FULL_SPHERE_POWER_NOTE
+    expected_note = (
+        hlp.PARTIAL_CAP_POWER_NOTE if theta_max == 90.0 else hlp.FULL_SPHERE_POWER_NOTE
+    )
+    assert metrics["method"] == expected_note
 
 
 @pytest.mark.parametrize("theta_max", [60.0, 90.0, 120.0, 180.0])
@@ -217,14 +220,26 @@ def test_declared_cap_integrates_only_the_sampled_solid_angle(theta_max):
     )
 
 
-def test_declared_cap_does_not_claim_a_full_sphere_integration():
-    theta, phi = _cap_axes(60.0, n_theta=61)
+@pytest.mark.parametrize("theta_max", [60.0, 90.0, 120.0, 180.0])
+def test_declared_cap_description_matches_coverage(theta_max):
+    theta, phi = _cap_axes(theta_max, n_theta=61)
     pressure = np.ones((1, theta.size, phi.size), dtype=np.complex128)
 
     metrics = hlp.sphere_power_metrics(
-        pressure, theta, phi, distance_m=1.0, cap_theta_max_deg=60.0
+        pressure, theta, phi, distance_m=1.0, cap_theta_max_deg=theta_max
     )
 
+    expected_note = (
+        hlp.FULL_SPHERE_POWER_NOTE if theta_max == 180.0 else hlp.PARTIAL_CAP_POWER_NOTE
+    )
+    assert metrics["method"] == expected_note
+    assert metrics["approximation"] == expected_note
+
+
+def test_undeclared_hemisphere_description_includes_silent_rear():
+    theta, phi = _cap_axes(90.0)
+    pressure = np.ones((1, theta.size, phi.size), dtype=np.complex128)
+    metrics = hlp.sphere_power_metrics(pressure, theta, phi, distance_m=1.0)
     assert metrics["method"] == hlp.PARTIAL_CAP_POWER_NOTE
     assert metrics["approximation"] == hlp.PARTIAL_CAP_POWER_NOTE
 

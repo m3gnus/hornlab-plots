@@ -147,6 +147,17 @@ def _fig_to_base64(fig, dpi=150):
     return base64.b64encode(buf.read()).decode("ascii")
 
 
+def _line_samples(frequencies, values):
+    """Drop invalid log-frequency coordinates, keeping missing values as gaps."""
+    freqs = np.asarray(frequencies, dtype=float)
+    values = np.asarray(values, dtype=float)
+    n = min(freqs.size, values.size)
+    freqs, values = freqs[:n], values[:n]
+    valid_freqs = np.isfinite(freqs) & (freqs > 0.0)
+    values = values[valid_freqs]
+    return freqs[valid_freqs], np.where(np.isfinite(values), values, np.nan)
+
+
 def _coerce_response_curve(curve) -> FrequencyResponseCurve:
     if isinstance(curve, FrequencyResponseCurve):
         return curve
@@ -359,19 +370,11 @@ def _build_frequency_response_figure(
         fig.patch.set_facecolor(theme_obj.figure_bg)
 
         for curve in response_curves:
-            freqs = np.asarray(curve.frequencies, dtype=float)
-            values = np.asarray(curve.spl_db, dtype=float)
-            if freqs.size == 0 or values.size == 0:
+            freqs, values = _line_samples(curve.frequencies, curve.spl_db)
+            if not np.any(np.isfinite(values)):
                 continue
-            n = min(freqs.size, values.size)
-            freqs = freqs[:n]
-            values = values[:n]
-            finite = np.isfinite(freqs) & np.isfinite(values) & (freqs > 0)
-            if not np.any(finite):
-                continue
-            freqs = freqs[finite]
-            values = values[finite]
-            plotted.append((freqs, values))
+            finite_values = np.isfinite(values)
+            plotted.append((freqs[finite_values], values[finite_values]))
             primary_lines.extend(
                 ax.semilogx(
                     freqs,
@@ -383,16 +386,10 @@ def _build_frequency_response_figure(
 
         reference_plotted = False
         if plotted and _nonempty(reference_frequencies) and _nonempty(reference_spl):
-            ref_freqs = np.asarray(reference_frequencies, dtype=float)
-            ref_values = np.asarray(reference_spl, dtype=float)
-            n = min(ref_freqs.size, ref_values.size)
-            ref_freqs = ref_freqs[:n]
-            ref_values = ref_values[:n]
-            finite = np.isfinite(ref_freqs) & np.isfinite(ref_values) & (ref_freqs > 0)
-            if np.any(finite):
-                ref_freqs = ref_freqs[finite]
-                ref_values = ref_values[finite]
-                plotted.append((ref_freqs, ref_values))
+            ref_freqs, ref_values = _line_samples(reference_frequencies, reference_spl)
+            if np.any(np.isfinite(ref_values)):
+                finite_values = np.isfinite(ref_values)
+                plotted.append((ref_freqs[finite_values], ref_values[finite_values]))
                 ax.semilogx(
                     ref_freqs,
                     ref_values,
@@ -644,18 +641,9 @@ def directivity_index_b64(
         plotted_plane_count = 0
         primary_lines = {}
         for index, (plane_id, di_vals) in enumerate(planes.items()):
-            n_points = min(freqs.size, di_vals.size)
-            plane_freqs = freqs[:n_points]
-            plane_vals = di_vals[:n_points]
-            valid = (
-                np.isfinite(plane_freqs)
-                & (plane_freqs > 0.0)
-                & np.isfinite(plane_vals)
-            )
-            if not np.any(valid):
+            plane_freqs, plane_vals = _line_samples(freqs, di_vals)
+            if not np.any(np.isfinite(plane_vals)):
                 continue
-            plane_freqs = plane_freqs[valid]
-            plane_vals = plane_vals[valid]
             color = (
                 line_palette[index % len(line_palette)]
                 if line_palette
@@ -669,8 +657,9 @@ def directivity_index_b64(
                 linewidth=1.5,
                 label=label,
             )[0]
-            all_vals.extend(plane_vals.tolist())
-            all_plotted_freqs.extend(plane_freqs.tolist())
+            finite_values = np.isfinite(plane_vals)
+            all_vals.extend(plane_vals[finite_values].tolist())
+            all_plotted_freqs.extend(plane_freqs[finite_values].tolist())
             plotted_plane_count += 1
 
         if not all_vals:
@@ -701,18 +690,9 @@ def directivity_index_b64(
 
             ref_name = str(reference_label or "Reference")
             for plane_id, ref_vals in reference_planes.items():
-                n_points = min(reference_freqs.size, ref_vals.size)
-                plane_freqs = reference_freqs[:n_points]
-                plane_vals = ref_vals[:n_points]
-                valid = (
-                    np.isfinite(plane_freqs)
-                    & (plane_freqs > 0.0)
-                    & np.isfinite(plane_vals)
-                )
-                if not np.any(valid):
+                plane_freqs, plane_vals = _line_samples(reference_freqs, ref_vals)
+                if not np.any(np.isfinite(plane_vals)):
                     continue
-                plane_freqs = plane_freqs[valid]
-                plane_vals = plane_vals[valid]
                 plane_label = plane_labels.get(plane_id, plane_id.capitalize())
                 label = f"{ref_name} {plane_label}" if isinstance(di, dict) else ref_name
                 ax.semilogx(
@@ -724,8 +704,9 @@ def directivity_index_b64(
                     alpha=0.6,
                     label=label,
                 )
-                all_vals.extend(plane_vals.tolist())
-                all_plotted_freqs.extend(plane_freqs.tolist())
+                finite_values = np.isfinite(plane_vals)
+                all_vals.extend(plane_vals[finite_values].tolist())
+                all_plotted_freqs.extend(plane_freqs[finite_values].tolist())
                 reference_plotted = True
 
         if reference_plotted:
@@ -1021,6 +1002,18 @@ def save_impedance_plot(
     return out
 
 
+def _impedance_samples(frequencies, real, imaginary):
+    """Prepare both impedance components without dropping either one's gaps."""
+    n = min(len(frequencies), len(real))
+    freqs, re_vals = _line_samples(frequencies, real)
+    im_vals = np.array([], dtype=float)
+    if imaginary is not None and len(imaginary) >= n:
+        _, im_vals = _line_samples(frequencies[:n], imaginary[:n])
+    if not np.any(np.isfinite(re_vals)) and not np.any(np.isfinite(im_vals)):
+        return None
+    return freqs, re_vals, im_vals
+
+
 def _build_impedance_figure(
     frequencies,
     real,
@@ -1038,49 +1031,18 @@ def _build_impedance_figure(
 ):
     theme_obj = apply_theme_overrides(theme, colors=colors, line_colors=line_colors)
     line_palette = tuple(line_colors) if line_colors is not None else None
-    freqs = np.array(frequencies, dtype=float)
-    re_vals = np.array(real, dtype=float)
-    im_vals = np.array(imaginary, dtype=float)
-
-    if freqs.size == 0 or re_vals.size == 0:
+    data = _impedance_samples(frequencies, real, imaginary)
+    if data is None:
         return None
-
-    # Keep only finite, positive-frequency samples (log x-axis) with a finite
-    # real part; drop the imaginary trace if it is mismatched or non-finite.
-    n = min(freqs.size, re_vals.size)
-    freqs, re_vals = freqs[:n], re_vals[:n]
-    has_imag = im_vals.size >= n
-    im_vals = im_vals[:n] if has_imag else np.array([], dtype=float)
-    valid = np.isfinite(freqs) & (freqs > 0) & np.isfinite(re_vals)
-    if has_imag:
-        valid &= np.isfinite(im_vals)
-    if not np.any(valid):
-        return None
-    freqs, re_vals = freqs[valid], re_vals[valid]
-    im_vals = im_vals[valid] if has_imag else np.array([], dtype=float)
+    freqs, re_vals, im_vals = data
 
     reference_data = None
     if _nonempty(reference_frequencies) and _nonempty(reference_real):
-        ref_freqs = np.asarray(reference_frequencies, dtype=float)
-        ref_real = np.asarray(reference_real, dtype=float)
-        ref_imag = (
-            np.asarray(reference_imaginary, dtype=float)
-            if _nonempty(reference_imaginary)
-            else np.array([], dtype=float)
+        reference_data = _impedance_samples(
+            reference_frequencies,
+            reference_real,
+            reference_imaginary if _nonempty(reference_imaginary) else [],
         )
-        ref_n = min(ref_freqs.size, ref_real.size)
-        ref_freqs, ref_real = ref_freqs[:ref_n], ref_real[:ref_n]
-        ref_has_imag = ref_imag.size >= ref_n
-        ref_imag = ref_imag[:ref_n] if ref_has_imag else np.array([], dtype=float)
-        ref_valid = np.isfinite(ref_freqs) & (ref_freqs > 0) & np.isfinite(ref_real)
-        if ref_has_imag:
-            ref_valid &= np.isfinite(ref_imag)
-        if np.any(ref_valid):
-            reference_data = (
-                ref_freqs[ref_valid],
-                ref_real[ref_valid],
-                ref_imag[ref_valid] if ref_has_imag else np.array([], dtype=float),
-            )
 
     with theme_rc_context(theme_obj):
         fig, ax = plt.subplots(1, 1, figsize=(10, 4))
@@ -1131,10 +1093,21 @@ def _build_impedance_figure(
         _apply_canonical_axes(ax, "Frequency [Hz]", ylabel, title, theme=theme_obj)
         ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
 
+        finite_values = np.isfinite(re_vals)
+        if im_vals.size:
+            finite_values |= np.isfinite(im_vals)
+        plotted_freqs = freqs[finite_values]
         if reference_data is None:
-            ax.set_xlim(freqs[0], freqs[-1])
+            ax.set_xlim(plotted_freqs[0], plotted_freqs[-1])
         else:
-            ax.set_xlim(min(freqs[0], ref_freqs[0]), max(freqs[-1], ref_freqs[-1]))
+            finite_values = np.isfinite(ref_real)
+            if ref_imag.size:
+                finite_values |= np.isfinite(ref_imag)
+            ref_plotted_freqs = ref_freqs[finite_values]
+            ax.set_xlim(
+                min(plotted_freqs[0], ref_plotted_freqs[0]),
+                max(plotted_freqs[-1], ref_plotted_freqs[-1]),
+            )
 
         all_vals = np.concatenate([re_vals, im_vals]) if len(im_vals) > 0 else re_vals
         if reference_data is not None:
@@ -1150,10 +1123,7 @@ def _build_impedance_figure(
         margin = z_range * 0.1 if z_range > 0 else max(abs(z_max) * 0.1, 1.0)
         ax.set_ylim(z_min - margin, z_max + margin)
 
-        if reference_data is None:
-            _add_log_grid(ax, freqs[0], freqs[-1], theme=theme_obj)
-        else:
-            _add_log_grid(ax, ax.get_xlim()[0], ax.get_xlim()[1], theme=theme_obj)
+        _add_log_grid(ax, ax.get_xlim()[0], ax.get_xlim()[1], theme=theme_obj)
 
         legend = ax.legend(loc="upper right", fontsize=10,
                            facecolor=theme_obj.axes_bg, edgecolor=theme_obj.spine_color,
