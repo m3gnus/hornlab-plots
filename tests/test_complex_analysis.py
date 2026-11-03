@@ -16,6 +16,74 @@ from hornlab_plots.complex_analysis import (
 )
 
 
+@pytest.mark.parametrize("sign", [1.0, -1.0])
+def test_relative_angular_phase_anchors_middle_reference_after_unwrap(sign):
+    pressure = np.exp(1j * np.deg2rad(sign * np.array([[-170.0, 170.0, 150.0]])))
+    before = pressure.copy()
+
+    relative = complex_analysis._relative_angular_phase(pressure, onaxis_idx=1)
+
+    np.testing.assert_allclose(np.rad2deg(relative), sign * np.array([[20.0, 0.0, -20.0]]))
+    np.testing.assert_array_equal(pressure, before)
+
+
+def test_relative_angular_phase_unwraps_finite_segments_without_bridging_gaps():
+    phases = np.array([-170.0, 170.0, 0.0, 170.0, 150.0, 0.0, 150.0, 130.0])
+    pressure = np.exp(1j * np.deg2rad(phases))
+    pressure[2] = complex(np.nan, 0.0)
+    pressure[5] = complex(np.inf, 0.0)
+
+    relative = complex_analysis._relative_angular_phase(pressure, onaxis_idx=3)
+
+    np.testing.assert_allclose(
+        np.rad2deg(relative), [20.0, 0.0, np.nan, 0.0, -20.0, np.nan, -20.0, -40.0],
+        atol=1e-12,
+    )
+
+
+@pytest.mark.parametrize("reference", [complex(np.nan, 0.0), complex(np.inf, 0.0)])
+def test_relative_angular_phase_marks_row_unavailable_with_invalid_reference(reference):
+    pressure = np.array([[1.0, reference, 1j], [1j, 1.0, -1j]])
+
+    relative = complex_analysis._relative_angular_phase(pressure, onaxis_idx=1)
+
+    assert np.all(np.isnan(relative[0]))
+    np.testing.assert_allclose(np.rad2deg(relative[1]), [90.0, 0.0, -90.0])
+
+
+@pytest.mark.parametrize("renderer", ["sonogram", "polar", "hv_tracking"])
+def test_phase_renderers_use_continuous_onaxis_relative_phase(tmp_path, monkeypatch, renderer):
+    pressure = np.exp(1j * np.deg2rad([[-170.0, 170.0, 150.0]]))
+    source = complex_analysis.ComplexDirectivity(
+        np.array([1000.0]), np.array([-90.0, 0.0, 90.0]), pressure,
+        np.exp(1j * np.deg2rad([[10.0, 0.0, -10.0]])) if renderer == "hv_tracking" else None,
+    )
+    figures = []
+
+    def capture(fig, out, **kwargs):
+        figures.append(fig)
+        return out
+
+    monkeypatch.setattr(complex_analysis, "_finish_fig", capture)
+    out = tmp_path / "phase.png"
+    try:
+        if renderer == "sonogram":
+            complex_analysis.plot_phase_sonogram(source, out)
+            values = figures[0].axes[0].collections[0].get_array()
+            np.testing.assert_allclose(np.asarray(values).reshape(-1), [20.0, 0.0, -20.0])
+        elif renderer == "polar":
+            complex_analysis.plot_phase_polar(source, out, freqs_to_show=(1000.0,))
+            values = figures[0].axes[0].lines[0].get_ydata()
+            np.testing.assert_allclose(values, [-20.0, 0.0, 20.0, 20.0, 0.0, -20.0])
+        else:
+            complex_analysis.plot_hv_phase_tracking(source, out)
+            values = figures[0].axes[1].collections[0].get_array()
+            np.testing.assert_allclose(np.asarray(values).reshape(-1), [10.0, 0.0, -10.0])
+    finally:
+        for fig in figures:
+            complex_analysis.plt.close(fig)
+
+
 @pytest.mark.parametrize("dtype", [np.complex64, np.complex128])
 def test_di_kernel_matches_legacy_expression_without_mutating_input(dtype):
     theta = np.linspace(0.0, 180.0, 5)

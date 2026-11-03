@@ -299,6 +299,35 @@ def _rotate_to_onaxis_phase_zero(p: np.ndarray, theta: np.ndarray) -> np.ndarray
     return p * rot
 
 
+def _relative_angular_phase(p: np.ndarray, onaxis_idx: int) -> np.ndarray:
+    """Unwrap finite angular segments and anchor the on-axis sample at zero.
+
+    A missing reference makes its entire row unavailable. Across gaps, the
+    nearest sample of each detached segment uses the principal phase relative
+    to on-axis; no phase continuity is inferred through missing samples.
+    """
+    values = np.asarray(p, dtype=complex)
+    relative = np.full(values.shape, np.nan, dtype=float)
+    for row, out in zip(
+        values.reshape(-1, values.shape[-1]),
+        relative.reshape(-1, values.shape[-1]),
+    ):
+        valid = _finite_complex(row)
+        if not valid[onaxis_idx]:
+            continue
+        phase = np.angle(row)
+        boundaries = np.flatnonzero(np.diff(np.r_[False, valid, False]))
+        for start, stop in boundaries.reshape(-1, 2):
+            unwrapped = np.unwrap(phase[start:stop])
+            anchor = int(np.clip(onaxis_idx, start, stop - 1))
+            delta = phase[anchor] - phase[onaxis_idx]
+            # Detached segments choose the shortest relative phase at the
+            # endpoint closest to on-axis, then unwrap within that segment.
+            delta -= 2.0 * np.pi * np.round(delta / (2.0 * np.pi))
+            out[start:stop] = unwrapped - unwrapped[anchor - start] + delta
+    return relative
+
+
 def _band_taper(n: int) -> np.ndarray:
     if n < 4:
         return np.ones(n)
@@ -452,7 +481,7 @@ def plot_phase_sonogram(d: ComplexDirectivity, out: Path) -> Path:
         axes = [axes]
     onaxis_idx = int(np.argmin(np.abs(d.theta)))
     for ax, (p, name) in zip(axes, sources):
-        phi_rel = np.unwrap(np.angle(p) - np.angle(p[:, onaxis_idx:onaxis_idx + 1]), axis=1)
+        phi_rel = _relative_angular_phase(p, onaxis_idx)
         phi_deg = np.rad2deg(phi_rel)
         vlim = 360.0
         im = ax.pcolormesh(d.freqs, d.theta, phi_deg.T,
@@ -487,7 +516,7 @@ def plot_phase_polar(d: ComplexDirectivity, out: Path,
             [(d.p_h, "H", _line_color(0))] +
             ([(d.p_v, "V", _line_color(1))] if d.p_v is not None else [])
         ):
-            phi = np.unwrap(np.angle(p[idx]) - np.angle(p[idx, onaxis_idx]))
+            phi = _relative_angular_phase(p[idx], onaxis_idx)
             phi_deg = np.rad2deg(phi)
             t_full = np.concatenate([-d.theta[::-1], d.theta])
             phi_full = np.concatenate([phi_deg[::-1], phi_deg])
@@ -732,8 +761,8 @@ def plot_hv_phase_tracking(d: ComplexDirectivity, out: Path) -> Path:
               title="On-axis H–V phase error")
 
     onaxis_idx = int(np.argmin(np.abs(d.theta)))
-    phi_h = np.unwrap(np.angle(d.p_h) - np.angle(d.p_h[:, onaxis_idx:onaxis_idx + 1]), axis=1)
-    phi_v = np.unwrap(np.angle(d.p_v) - np.angle(d.p_v[:, onaxis_idx:onaxis_idx + 1]), axis=1)
+    phi_h = _relative_angular_phase(d.p_h, onaxis_idx)
+    phi_v = _relative_angular_phase(d.p_v, onaxis_idx)
     diff = np.rad2deg(phi_h - phi_v)
     vlim = 90.0
     mesh = axes[1].pcolormesh(d.freqs, d.theta, diff.T,
