@@ -74,7 +74,8 @@ def test_phase_renderers_use_continuous_onaxis_relative_phase(tmp_path, monkeypa
         elif renderer == "polar":
             complex_analysis.plot_phase_polar(source, out, freqs_to_show=(1000.0,))
             values = figures[0].axes[0].lines[0].get_ydata()
-            np.testing.assert_allclose(values, [-20.0, 0.0, 20.0, 20.0, 0.0, -20.0])
+            np.testing.assert_allclose(figures[0].axes[0].lines[0].get_xdata(), np.deg2rad([-90.0, 0.0, 90.0]))
+            np.testing.assert_allclose(values, [20.0, 0.0, -20.0])
         else:
             complex_analysis.plot_hv_phase_tracking(source, out)
             values = figures[0].axes[1].collections[0].get_array()
