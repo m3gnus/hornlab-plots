@@ -24,8 +24,6 @@ Public API:
   ``directivity_map`` keys.
 - ``polar_line_b64(...)`` / ``save_polar_line_plot(...)`` — fixed-frequency
   polar line plots from complex pressure or dB arrays.
-- ``hornlab_plots.complex_analysis`` — complex-pressure analysis plots used
-  by WG's ``/api/render-complex-analysis`` route and CLI wrapper.
 
 Derived-output renderers (ported from the Fusion addin; see
 ``hornlab_plots.derived`` for the engineering ``exp(+j*omega*t)``
