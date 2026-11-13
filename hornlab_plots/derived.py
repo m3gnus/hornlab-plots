@@ -10,7 +10,6 @@ legacy originals exactly.
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import matplotlib
 
@@ -21,6 +20,8 @@ from matplotlib.ticker import FuncFormatter
 
 from ._grid import freq_formatter, log_grid_lines, preferred_frequency_ticks
 from ._heatmap import _draw_mesh_valid_markers
+from ._png import save_png
+from .charts import _apply_canonical_axes
 from .style import (
     apply_theme_overrides,
     theme_grid_kwargs,
@@ -366,13 +367,7 @@ def _apply_mesh_valid_markers(
 def _style_line_axes(ax, *, title, xlabel, ylabel, theme):
     """Canonical derived-chart axes: log-frequency ticks + grid, y-grid."""
     theme_obj = theme
-    ax.set_facecolor(theme_obj.axes_bg)
-    ax.set_title(title, color=theme_obj.text_color, fontsize=13, fontweight="600", pad=8)
-    ax.set_xlabel(xlabel, color=theme_obj.text_color, fontsize=11)
-    ax.set_ylabel(ylabel, color=theme_obj.text_color, fontsize=11)
-    ax.tick_params(colors=theme_obj.tick_color, labelsize=9)
-    for spine in ax.spines.values():
-        spine.set_color(theme_obj.spine_color)
+    _apply_canonical_axes(ax, xlabel, ylabel, title, theme=theme_obj, grid_axis="y")
     ax.xaxis.set_major_formatter(FuncFormatter(freq_formatter))
     ticks = preferred_frequency_ticks(*ax.get_xlim())
     if ticks:
@@ -386,29 +381,6 @@ def _style_line_axes(ax, *, title, xlabel, ylabel, theme):
             zorder=0,
             **theme_grid_kwargs(theme_obj, linewidth=0.7 if major else 0.5),
         )
-    ax.grid(
-        True,
-        axis="y",
-        alpha=theme_obj.secondary_grid_alpha,
-        color=theme_obj.grid_color,
-        **theme_grid_kwargs(theme_obj, linewidth=0.5),
-    )
-
-
-def _save_figure(fig, output_path, *, dpi, bbox_inches=None):
-    out = Path(output_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    kwargs = {} if bbox_inches is None else {"bbox_inches": bbox_inches}
-    fig.savefig(
-        str(out),
-        format="png",
-        dpi=dpi,
-        facecolor=fig.get_facecolor(),
-        edgecolor="none",
-        **kwargs,
-    )
-    plt.close(fig)
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +526,7 @@ def save_directivity_power_plot(
         theme=theme,
         colors=colors,
     )
-    return _save_figure(fig, output_path, dpi=dpi)
+    return save_png(fig, output_path, dpi=dpi, bbox_inches=None)
 
 
 # ---------------------------------------------------------------------------
@@ -672,7 +644,7 @@ def save_beamwidth_plot(
         theme=theme,
         colors=colors,
     )
-    return _save_figure(fig, output_path, dpi=dpi)
+    return save_png(fig, output_path, dpi=dpi, bbox_inches=None)
 
 
 __all__ = [

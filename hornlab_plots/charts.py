@@ -6,11 +6,8 @@ styling is shared with the directivity heatmap.
 
 from __future__ import annotations
 
-import base64
-import io
 import warnings
 from dataclasses import dataclass
-from pathlib import Path
 
 import matplotlib
 
@@ -23,6 +20,8 @@ from matplotlib.ticker import FuncFormatter
 from matplotlib.transforms import blended_transform_factory
 
 from ._grid import freq_formatter, log_grid_lines, preferred_frequency_ticks
+from ._png import fig_to_b64 as _fig_to_base64
+from ._png import save_png
 from .style import (
     DPI,
     apply_theme_overrides,
@@ -87,7 +86,14 @@ def set_spl_window(
         ax.set_ylim(*window)
 
 
-def _apply_canonical_axes(ax, xlabel, ylabel, title, *, theme=None, colors=None):
+def _apply_canonical_axes(
+    ax, xlabel, ylabel, title, *, theme=None, colors=None, grid_axis="both"
+):
+    """Canonical labels, ticks, spines and value grid for every line chart.
+
+    ``grid_axis="y"`` leaves the frequency axis to a caller that draws its own
+    log-frequency grid lines.
+    """
     theme_obj = apply_theme_overrides(theme, colors=colors)
     ax.set_facecolor(theme_obj.axes_bg)
     ax.set_xlabel(xlabel, color=theme_obj.text_color, fontsize=11)
@@ -98,6 +104,7 @@ def _apply_canonical_axes(ax, xlabel, ylabel, title, *, theme=None, colors=None)
         spine.set_color(theme_obj.spine_color)
     ax.grid(
         True,
+        axis=grid_axis,
         alpha=theme_obj.secondary_grid_alpha,
         color=theme_obj.grid_color,
         **theme_grid_kwargs(theme_obj, linewidth=0.5),
@@ -135,16 +142,6 @@ def _add_log_grid(ax, freq_min, freq_max, *, detailed=False, theme=None, colors=
             alpha=theme_obj.secondary_grid_alpha,
             **theme_grid_kwargs(theme_obj, linewidth=0.5),
         )
-
-
-def _fig_to_base64(fig, dpi=150):
-    """Export figure to base64-encoded PNG."""
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=dpi, facecolor=fig.get_facecolor(),
-                edgecolor="none", bbox_inches="tight")
-    plt.close(fig)
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode("ascii")
 
 
 def _line_samples(frequencies, values):
@@ -514,18 +511,7 @@ def save_frequency_response_plot(output_path, curves, dpi=DPI, **kwargs):
     fig = _build_frequency_response_figure(curves, **kwargs)
     if fig is None:
         return None
-    out = Path(output_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(
-        str(out),
-        format="png",
-        dpi=dpi,
-        facecolor=fig.get_facecolor(),
-        edgecolor="none",
-        bbox_inches="tight",
-    )
-    plt.close(fig)
-    return out
+    return save_png(fig, output_path, dpi=dpi)
 
 
 def frequency_response_b64(

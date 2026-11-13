@@ -12,9 +12,6 @@ numpy arrays compose ``prepare_heatmap_data`` and ``render_single_heatmap``.
 
 from __future__ import annotations
 
-import base64
-import io
-from pathlib import Path
 
 import matplotlib
 
@@ -30,6 +27,7 @@ from ._grid import (
     log_grid_lines,
     preferred_frequency_ticks,
 )
+from ._png import fig_to_b64, save_png
 from .style import (
     ANGLE_SAMPLES,
     FRACTIONAL_OCTAVE,
@@ -789,18 +787,7 @@ def directivity_heatmap_from_legacy_dict(
         display_range_db=display_range_db,
     )
 
-    buf = io.BytesIO()
-    fig.savefig(
-        buf,
-        format="png",
-        dpi=dpi,
-        facecolor=fig.get_facecolor(),
-        edgecolor="none",
-        bbox_inches="tight",
-    )
-    plt.close(fig)
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode("ascii")
+    return fig_to_b64(fig, dpi)
 
 
 def save_directivity_plot(
@@ -849,15 +836,4 @@ def save_directivity_plot(
         display_range_db=display_range_db,
     )
 
-    out = Path(output_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(
-        str(out),
-        format="png",
-        dpi=dpi,
-        facecolor=fig.get_facecolor(),
-        edgecolor="none",
-        bbox_inches="tight",
-    )
-    plt.close(fig)
-    return out
+    return save_png(fig, output_path, dpi=dpi)
