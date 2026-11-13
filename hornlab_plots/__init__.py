@@ -10,28 +10,18 @@ Public API:
 - ``directivity_heatmap_from_legacy_dict(frequencies, directivity, ...)`` —
   API-compatible replacement for WG ``render_directivity_plot``.
   Accepts the dict-of-list payload shape ``{"horizontal": [[[angle, db], ...], ...], ...}``.
-- ``directivity_heatmap_b64(freq_hz, angles_deg, spl_db, ...)`` —
-  numpy-array signature (preferred for new callers).
 - ``save_directivity_plot(output_path, frequencies, directivity, ...)`` —
   same as the legacy-dict signature but writes to disk.
 - ``frequency_response_b64(frequencies, spl)`` — on-axis SPL.
 - ``directivity_index_b64(frequencies, di)`` — DI vs frequency.
 - ``forward_beam_shape_b64(beam_shape)`` — fitted beam shape + spherical DI.
 - ``impedance_b64(frequencies, real, imaginary)`` — \\|Z\\| line plot.
-- ``save_impedance_plot(output_path, ...)`` — impedance to disk.
 - ``render_all_charts_b64(payload)`` — convenience: returns dict with
   ``frequency_response``, ``directivity_index``, ``impedance``,
   ``directivity_map`` keys.
-- ``polar_line_b64(...)`` / ``save_polar_line_plot(...)`` — fixed-frequency
-  polar line plots from complex pressure or dB arrays.
 
-Derived-output renderers (ported from the Fusion addin; see
-``hornlab_plots.derived`` for the engineering ``exp(+j*omega*t)``
-complex-pressure contract):
+Derived-output renderers (ported from the Fusion addin):
 
-- ``save_interference_heatmap(output_path, freqs, pressure_by_source, ...)``
-  — coherent-vs-incoherent driver-sum ratio heatmap per plane
-  (``interference_ratio_db`` exposes the underlying math).
 - ``save_directivity_power_plot(output_path, freqs, di_db, power_db, ...)``
   — DI + power response on twin axes.
 - ``sphere_power_metrics(pressure, theta_deg, phi_deg, ...)`` — solid-angle
@@ -41,17 +31,12 @@ complex-pressure contract):
   coverage and integrate it over its own solid angle.
 - ``save_beamwidth_plot(output_path, freqs, beamwidths_deg, ...)`` —
   -6 dB beamwidth vs frequency per plane.
-- ``save_group_delay_plot(output_path, freqs, group_delay_s, ...)`` —
-  on-axis group delay vs frequency.
-- ``save_excursion_plot(output_path, freqs, excursion_m, ...)`` — cone
-  excursion vs frequency with optional Xmax marker.
 
 Lower-level primitives:
 
 - ``render_single_heatmap(ax, ...)`` — render onto a caller-supplied Axes.
 - ``prepare_heatmap_data(angles, freqs, values)``
 - ``build_grid_from_legacy(freqs, patterns)``
-- ``check_symmetry(h_values, v_values)``
 
 Theme API and backwards-compatible constants live in
 ``hornlab_plots.style``. Project-specific plot templates live with their
@@ -66,8 +51,6 @@ from ._grid import (
 )
 from ._heatmap import (
     build_grid_from_legacy,
-    check_symmetry,
-    directivity_heatmap_b64,
     directivity_heatmap_from_legacy_dict,
     prepare_heatmap_data,
     render_single_heatmap,
@@ -78,29 +61,18 @@ from .charts import (
     directivity_index_b64,
     forward_beam_shape_b64,
     frequency_response_b64,
-    frequency_response_multi_b64,
     impedance_b64,
     render_all_charts_b64,
     save_frequency_response_plot,
-    save_impedance_plot,
     set_spl_window,
     spl_window,
-)
-from ._polar import (
-    polar_line_b64,
-    prepare_polar_line_data,
-    save_polar_line_plot,
 )
 from .derived import (
     FULL_SPHERE_POWER_NOTE,
     PARTIAL_CAP_POWER_NOTE,
     POLAR_POWER_APPROXIMATION_NOTE,
-    interference_ratio_db,
     save_beamwidth_plot,
     save_directivity_power_plot,
-    save_excursion_plot,
-    save_group_delay_plot,
-    save_interference_heatmap,
     sphere_power_metrics,
 )
 from .style import (
@@ -118,9 +90,7 @@ from .style import (
     SEPIA_THEME,
     Theme,
     get_theme,
-    set_theme,
     theme,
-    theme_context,
 )
 
 __version__ = "0.1.2"
@@ -128,23 +98,16 @@ __version__ = "0.1.2"
 __all__ = [
     # Heatmap entry points
     "directivity_heatmap_from_legacy_dict",
-    "directivity_heatmap_b64",
     "save_directivity_plot",
     "render_single_heatmap",
     "prepare_heatmap_data",
     "build_grid_from_legacy",
-    "check_symmetry",
-    "prepare_polar_line_data",
-    "polar_line_b64",
-    "save_polar_line_plot",
     # Line charts
     "frequency_response_b64",
-    "frequency_response_multi_b64",
     "directivity_index_b64",
     "forward_beam_shape_b64",
     "impedance_b64",
     "save_frequency_response_plot",
-    "save_impedance_plot",
     "render_all_charts_b64",
     "FrequencyResponseCurve",
     "set_spl_window",
@@ -154,12 +117,8 @@ __all__ = [
     "PARTIAL_CAP_POWER_NOTE",
     "POLAR_POWER_APPROXIMATION_NOTE",
     "sphere_power_metrics",
-    "interference_ratio_db",
-    "save_interference_heatmap",
     "save_directivity_power_plot",
     "save_beamwidth_plot",
-    "save_group_delay_plot",
-    "save_excursion_plot",
     # Themes
     "Theme",
     "HORNLAB_THEME",
@@ -175,9 +134,7 @@ __all__ = [
     "CLASSIC_THEME",
     "BUILTIN_THEMES",
     "get_theme",
-    "set_theme",
     "theme",
-    "theme_context",
     # Tick / grid helpers
     "log_grid_lines",
     "preferred_frequency_ticks",

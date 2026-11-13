@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import base64
 import warnings
-from pathlib import Path
 
-import matplotlib.figure
 import numpy as np
 import pytest
 
@@ -64,7 +62,7 @@ def test_directivity_heatmap_from_legacy_dict_h_only():
 def test_directivity_heatmap_from_legacy_dict_collapses_symmetric():
     """H == V → single-panel composite. Smoke: still produces a PNG."""
     freqs, directivity = _synthetic_legacy_dict()
-    # H and V identical → check_symmetry → single-panel composite
+    # H and V identical → symmetric planes → single-panel composite
     directivity["vertical"] = [list(row) for row in directivity["horizontal"]]
     b64 = hlp.directivity_heatmap_from_legacy_dict(freqs, directivity)
     assert _is_valid_b64_png(b64)
@@ -74,17 +72,6 @@ def test_directivity_heatmap_from_legacy_dict_empty_returns_none():
     assert hlp.directivity_heatmap_from_legacy_dict([], {}) is None
     assert hlp.directivity_heatmap_from_legacy_dict([100, 200], {}) is None
     assert hlp.directivity_heatmap_from_legacy_dict([100, 200], {"horizontal": []}) is None
-
-
-def test_directivity_heatmap_b64_with_title_kwarg():
-    freqs = np.geomspace(200.0, 16000.0, 12)
-    angles = np.linspace(-90.0, 90.0, 37)
-    sigma = 40.0
-    spl = (-15.0) * (1 - np.exp(-(angles ** 2) / (2 * sigma ** 2)))
-    spl_db = np.tile(spl[:, None], (1, freqs.size))
-
-    b64 = hlp.directivity_heatmap_b64(freqs, angles, spl_db, title="Numpy test")
-    assert _is_valid_b64_png(b64)
 
 
 def _synthetic_beam_shape():
@@ -124,141 +111,6 @@ def test_forward_beam_shape_b64_reference_and_theme():
         reference_label="Baseline",
         theme="granite",
     ))
-
-
-def test_prepare_polar_line_data_selects_nearest_and_normalizes():
-    freqs = np.array([100.0, 200.0, 400.0])
-    angles = np.array([0.0, 30.0, 60.0, 90.0])
-    db = np.array([
-        [10.0, 7.0, 4.0, 1.0],
-        [12.0, 8.0, 2.0, -2.0],
-        [14.0, 9.0, 1.0, -5.0],
-    ])
-
-    out_angles, selected_freqs, rows = hlp.prepare_polar_line_data(
-        freqs,
-        angles,
-        db,
-        [180.0, 390.0],
-        angle_max_deg=60.0,
-    )
-
-    np.testing.assert_allclose(out_angles, [0.0, 30.0, 60.0])
-    np.testing.assert_allclose(selected_freqs, [200.0, 400.0])
-    np.testing.assert_allclose(rows, [[0.0, -4.0, -10.0], [0.0, -5.0, -13.0]])
-
-
-def test_prepare_polar_line_data_sorts_angles_with_their_values():
-    freqs = np.array([100.0, 200.0])
-    angles = np.array([-60.0, 0.0, 30.0, 90.0])
-    db = np.array([
-        [-8.0, 0.0, -2.0, -12.0],
-        [-10.0, 1.0, -3.0, -15.0],
-    ])
-    expected = hlp.prepare_polar_line_data(
-        freqs,
-        angles,
-        db,
-        [190.0],
-        angle_min_deg=-60.0,
-        angle_max_deg=30.0,
-    )
-
-    for order in (np.array([3, 2, 1, 0]), np.array([2, 0, 3, 1])):
-        actual = hlp.prepare_polar_line_data(
-            freqs,
-            angles[order],
-            db[:, order],
-            [190.0],
-            angle_min_deg=-60.0,
-            angle_max_deg=30.0,
-        )
-        for expected_array, actual_array in zip(expected, actual):
-            np.testing.assert_array_equal(actual_array, expected_array)
-
-
-def test_prepare_polar_line_data_rejects_duplicate_angles():
-    with pytest.raises(ValueError, match="angles_deg must contain unique values"):
-        hlp.prepare_polar_line_data(
-            [100.0],
-            [-30.0, 0.0, 0.0, 30.0],
-            [[-3.0, 0.0, 2.0, -3.0]],
-            [100.0],
-        )
-
-
-@pytest.mark.parametrize(
-    ("frequencies", "angles", "values", "targets", "match"),
-    [
-        ([], [0.0, 30.0], np.empty((0, 2)), [100.0], "must not be empty"),
-        ([100.0], [], np.empty((1, 0)), [100.0], "must not be empty"),
-        ([100.0, np.nan], [0.0], np.zeros((2, 1)), [100.0], "frequencies_hz.*finite"),
-        ([100.0], [0.0, np.nan], np.zeros((1, 2)), [100.0], "angles_deg.*finite"),
-        ([100.0], [0.0], np.zeros((1, 1)), [np.nan], "target_frequencies_hz.*finite"),
-        ([100.0], [0.0], np.zeros((1, 1)), 100.0, "target_frequencies_hz.*1D"),
-        ([100.0], [0.0], np.zeros((1, 1)), [[100.0]], "target_frequencies_hz.*1D"),
-    ],
-)
-def test_prepare_polar_line_data_rejects_invalid_coordinates(
-    frequencies,
-    angles,
-    values,
-    targets,
-    match,
-):
-    with pytest.raises(ValueError, match=match):
-        hlp.prepare_polar_line_data(frequencies, angles, values, targets)
-
-
-def test_prepare_polar_line_data_rejects_nonfinite_reference_angle():
-    with pytest.raises(ValueError, match="reference_angle_deg must be finite"):
-        hlp.prepare_polar_line_data(
-            [100.0],
-            [0.0],
-            [[0.0]],
-            [100.0],
-            reference_angle_deg=np.inf,
-        )
-
-
-def test_polar_line_b64_accepts_complex_pressure():
-    freqs = np.array([100.0, 200.0, 400.0])
-    angles = np.linspace(0.0, 90.0, 7)
-    amp = np.vstack([
-        1.0 - 0.002 * angles,
-        1.0 - 0.004 * angles,
-        1.0 - 0.006 * angles,
-    ])
-    pressure = amp * np.exp(1j * np.deg2rad(angles))[None, :]
-
-    b64 = hlp.polar_line_b64(
-        freqs,
-        angles,
-        pressure,
-        [100.0, 350.0],
-        angle_max_deg=90.0,
-        title="H fixed-frequency polar",
-    )
-    assert _is_valid_b64_png(b64)
-
-
-def test_save_polar_line_plot_to_disk(tmp_path):
-    freqs = np.array([100.0, 200.0, 400.0])
-    angles = np.linspace(0.0, 90.0, 7)
-    db = np.tile(-0.1 * angles[None, :], (freqs.size, 1))
-
-    out = tmp_path / "polar_lines.png"
-    result = hlp.save_polar_line_plot(
-        out,
-        freqs,
-        angles,
-        db,
-        [100.0, 400.0],
-        angle_max_deg=90.0,
-    )
-    assert result == out
-    assert out.exists()
-    assert out.stat().st_size > 500
 
 
 def test_frequency_response_b64():
@@ -301,12 +153,14 @@ def test_phase_propagation_sign_conventions(conventions, expected):
     assert all(_phase_propagation_sign(value) == expected for value in conventions)
 
 
-def test_frequency_response_multi_b64():
+def test_save_frequency_response_plot_multi_trace_crossover(tmp_path):
     freqs = np.geomspace(100.0, 20000.0, 30)
     lf = 100.0 - 12.0 * np.log10(freqs / 800.0).clip(min=0.0)
     hf = 100.0 + 12.0 * np.log10(freqs / 800.0).clip(max=0.0)
     combined = np.maximum(lf, hf) + 1.5
-    b64 = hlp.frequency_response_multi_b64(
+    out = tmp_path / "crossover.png"
+    result = hlp.save_frequency_response_plot(
+        out,
         [
             hlp.FrequencyResponseCurve(freqs, lf, "LF LR4 LP", role="lf", crossover=True),
             hlp.FrequencyResponseCurve(freqs, hf, "HF LR4 HP", role="hf", crossover=True),
@@ -315,7 +169,8 @@ def test_frequency_response_multi_b64():
         title="Synthetic crossover",
         crossover_hz=800.0,
     )
-    assert _is_valid_b64_png(b64)
+    assert result == out
+    assert out.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_save_frequency_response_plot_to_disk(tmp_path):
@@ -396,49 +251,6 @@ def test_save_directivity_plot_to_disk(tmp_path):
     assert out.stat().st_size > 500  # non-empty PNG
 
 
-def test_save_impedance_plot_to_disk(tmp_path):
-    freqs = np.geomspace(100.0, 20000.0, 30)
-    real = 400.0 + 50.0 * np.sin(np.log10(freqs) * 2)
-    imag = 100.0 * np.cos(np.log10(freqs) * 2)
-    out = tmp_path / "impedance.png"
-    result = hlp.save_impedance_plot(out, freqs, real, imag)
-    assert result == out
-    assert out.exists()
-
-
-def test_save_impedance_plot_label_overrides_land_on_rendered_figure(tmp_path, monkeypatch):
-    freqs = np.geomspace(100.0, 20000.0, 30)
-    real = 4.0 + np.sin(np.log10(freqs) * 2)
-    imag = 2.0 * np.cos(np.log10(freqs) * 2)
-    out = tmp_path / "electrical_impedance.png"
-    captured = {}
-    original_savefig = matplotlib.figure.Figure.savefig
-
-    def spy_savefig(self, *args, **kwargs):
-        ax = self.axes[0]
-        captured["title"] = ax.get_title()
-        captured["ylabel"] = ax.get_ylabel()
-        return original_savefig(self, *args, **kwargs)
-
-    monkeypatch.setattr(matplotlib.figure.Figure, "savefig", spy_savefig)
-
-    result = hlp.save_impedance_plot(
-        out,
-        freqs,
-        real,
-        imag,
-        title="Electrical Input Impedance",
-        ylabel="|Z| [ohm] / phase-split real+imag [ohm]",
-    )
-
-    assert result == out
-    assert out.exists()
-    assert captured == {
-        "title": "Electrical Input Impedance",
-        "ylabel": "|Z| [ohm] / phase-split real+imag [ohm]",
-    }
-
-
 def test_render_all_charts_b64():
     freqs, directivity = _synthetic_legacy_dict()
     payload = {
@@ -502,8 +314,7 @@ def test_theme_api_pins_hornlab_defaults_and_restores_context():
     from hornlab_plots import style
 
     previous = style.get_theme()
-    style.set_theme("hornlab")
-    try:
+    with style.theme("hornlab"):
         theme = style.get_theme()
         assert theme.name == "hornlab"
         assert theme.figure_bg == "#080D16"
@@ -552,12 +363,11 @@ def test_theme_api_pins_hornlab_defaults_and_restores_context():
         assert dark.axes_bg == theme.axes_bg
 
         with pytest.raises(RuntimeError):
-            with style.theme_context("dark"):
+            with style.theme("dark"):
                 assert style.get_theme() is dark
                 raise RuntimeError("boom")
         assert style.get_theme() is theme
-    finally:
-        style.set_theme(previous)
+    assert style.get_theme() is previous
 
 
 def test_directivity_default_render_uses_hornlab_theme_values():

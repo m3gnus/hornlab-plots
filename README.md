@@ -2,8 +2,8 @@
 
 Reusable visualization stack for acoustic simulation results.
 
-This package renders directivity heatmaps, polar line plots, frequency
-response, DI, and impedance from numpy arrays or lightweight payloads. It can
+This package renders directivity heatmaps, frequency response, DI, beam
+shape, beamwidth, power response and impedance from numpy arrays or lightweight payloads. It can
 be used standalone or as the render layer for a BEM pipeline such as
 `hornlab-waveguide-mesher` (geometry → `.msh`) and `hornlab-metal-bem`
 (`.msh` → result NPZs / dicts).
@@ -44,18 +44,10 @@ b64 = hlp.directivity_heatmap_from_legacy_dict(
     smoothing_fraction=24.0,    # 1/24 octave; choose another denominator
 )
 
-# Or from numpy arrays directly (preferred).
-b64 = hlp.directivity_heatmap_b64(
-    freq_hz=np.array([1000, 2000, 4000]),
-    angles_deg=np.array([-90, ..., 90]),
-    spl_db=spl_matrix,        # (n_angle, n_freq)
-    plane="h",
-    reference_level=-6.0,
-)
-
 # Line plots.
 b64 = hlp.frequency_response_b64(freqs, spl)
-b64 = hlp.frequency_response_multi_b64(
+hlp.save_frequency_response_plot(
+    path,
     [
         hlp.FrequencyResponseCurve(freqs, lf_lp_db, "LF LR4 LP", role="lf", crossover=True),
         hlp.FrequencyResponseCurve(freqs, hf_hp_db, "HF LR4 HP", role="hf", crossover=True),
@@ -70,15 +62,9 @@ b64 = hlp.impedance_b64(freqs, z_real, z_imag)
 # Save to disk.
 hlp.save_directivity_plot(path, frequencies, directivity)
 hlp.save_frequency_response_plot(path, curves, title="On-axis response")
-hlp.save_impedance_plot(path, freqs, z_real, z_imag)
 
 # Derived-output renderers (promoted from the Fusion addin; data in, path
-# out, mesh-valid marker kwargs where the originals support them). See
-# hornlab_plots.derived for the engineering exp(+jwt) complex-pressure
-# contract on the interference inputs.
-hlp.save_interference_heatmap(path, freqs, {"MF": p_mf, "HF": p_hf},
-                              angles_deg, ("horizontal", "vertical"),
-                              crossovers_hz=[900.0])
+# out, mesh-valid marker kwargs where the originals support them).
 hlp.save_directivity_power_plot(path, freqs, di_db, power_response_db)
 metrics = hlp.sphere_power_metrics(
     sphere_pressure_complex,
@@ -87,14 +73,12 @@ metrics = hlp.sphere_power_metrics(
     distance_m=2.0,
 )
 hlp.save_beamwidth_plot(path, freqs, {"horizontal": bw_h, "vertical": bw_v})
-hlp.save_group_delay_plot(path, freqs, group_delay_s)
-hlp.save_excursion_plot(path, freqs, excursion_m, label="MF", xmax_m=3.5e-3)
 ```
 
 ### Canonical Frequency-Response Rules
 
-- Use `frequency_response_multi_b64()` or `save_frequency_response_plot()`
-  for every new on-axis response plot. Local matplotlib response plots should
+- Use `save_frequency_response_plot()` for every new on-axis response
+  plot. Local matplotlib response plots should
   be temporary only.
 - Use the role colors: `lf` = blue/cyan, `mf` = amber, `hf` = red, and
   `combined` = bright near-white. These are defined in
@@ -142,8 +126,8 @@ rejected as ambiguous.
 
 Eleven built-in themes register in `hornlab_plots.style.BUILTIN_THEMES`. The
 default is `hornlab` and its output is pixel-identical to the pre-theme-API
-renderer; the others opt in per call (`theme="granite"`) or process-wide
-(`set_theme(...)` / `theme_context(...)`).
+renderer; the others opt in per call (`theme="granite"`) or for a block of
+calls (`with hornlab_plots.theme("granite"):`).
 
 | Theme | Intent |
 | --- | --- |

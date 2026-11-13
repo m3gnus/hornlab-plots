@@ -645,7 +645,7 @@ def get_theme(theme: Theme | str | None = None) -> Theme:
     return resolve_theme(theme)
 
 
-def set_theme(theme: Theme | str) -> Theme:
+def _set_theme(theme: Theme | str) -> Theme:
     """Set the active HornLab plot Theme and return it."""
     global _CURRENT_THEME
     _CURRENT_THEME = resolve_theme(theme)
@@ -656,14 +656,12 @@ def set_theme(theme: Theme | str) -> Theme:
 def theme(theme: Theme | str) -> Iterator[Theme]:
     """Temporarily set the active Theme, restoring the previous Theme always."""
     previous = get_theme()
-    active = set_theme(theme)
+    active = _set_theme(theme)
     try:
         yield active
     finally:
-        set_theme(previous)
+        _set_theme(previous)
 
-
-theme_context = theme
 
 
 def theme_rc_context(theme: Theme | str | None = None):
@@ -773,7 +771,7 @@ def apply_theme_overrides(
 
 
 # Backwards-compatible constants. These are intentionally fixed to hornlab
-# defaults; they do not track set_theme().
+# defaults; they do not track the active theme.
 FIGURE_BG = HORNLAB_THEME.figure_bg
 AXES_BG = HORNLAB_THEME.axes_bg
 TEXT_COLOR = HORNLAB_THEME.text_color
@@ -818,9 +816,7 @@ __all__ = [
     "CLASSIC_THEME",
     "BUILTIN_THEMES",
     "get_theme",
-    "set_theme",
     "theme",
-    "theme_context",
     "resolve_theme",
     "apply_theme_overrides",
     "theme_rc_context",

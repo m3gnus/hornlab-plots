@@ -509,14 +509,6 @@ def _build_frequency_response_figure(
         return fig
 
 
-def frequency_response_multi_b64(curves, dpi=DPI, **kwargs):
-    """Render a canonical multi-trace frequency-response plot as base64 PNG."""
-    fig = _build_frequency_response_figure(curves, **kwargs)
-    if fig is None:
-        return None
-    return _fig_to_base64(fig, dpi)
-
-
 def save_frequency_response_plot(output_path, curves, dpi=DPI, **kwargs):
     """Save a canonical frequency-response plot to a PNG file."""
     fig = _build_frequency_response_figure(curves, **kwargs)
@@ -560,10 +552,9 @@ def frequency_response_b64(
     level so it reads flat across the passband (see
     :func:`_flatten_phase_for_display`).
     """
-    return frequency_response_multi_b64(
+    fig = _build_frequency_response_figure(
         [FrequencyResponseCurve(frequencies, spl, "On-axis", role="combined")],
         title="Frequency Response (On-Axis)",
-        dpi=dpi,
         theme=theme,
         colors=colors,
         line_colors=line_colors,
@@ -578,6 +569,9 @@ def frequency_response_b64(
         reference_spl=reference_spl,
         reference_label=reference_label,
     )
+    if fig is None:
+        return None
+    return _fig_to_base64(fig, dpi)
 
 
 def directivity_index_b64(
@@ -966,40 +960,6 @@ def impedance_b64(
     if fig is None:
         return None
     return _fig_to_base64(fig, dpi)
-
-
-def save_impedance_plot(
-    output_path,
-    frequencies,
-    real,
-    imaginary,
-    dpi=150,
-    *,
-    theme=None,
-    colors=None,
-    line_colors=None,
-    title="Acoustic Impedance",
-    ylabel="Z [Pa·s/m]",
-):
-    """Save acoustic impedance chart to a PNG file on disk."""
-    fig = _build_impedance_figure(
-        frequencies,
-        real,
-        imaginary,
-        theme=theme,
-        colors=colors,
-        line_colors=line_colors,
-        title=title,
-        ylabel=ylabel,
-    )
-    if fig is None:
-        return None
-    out = Path(output_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(str(out), format="png", dpi=dpi, facecolor=fig.get_facecolor(),
-                edgecolor="none", bbox_inches="tight")
-    plt.close(fig)
-    return out
 
 
 def _impedance_samples(frequencies, real, imaginary):

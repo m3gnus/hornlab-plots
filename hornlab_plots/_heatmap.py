@@ -1,13 +1,13 @@
 """Directivity heatmap core renderer.
 
-The public entry points (`directivity_heatmap_b64`, `save_directivity_plot`,
+The public entry points (`save_directivity_plot`,
 `directivity_heatmap_from_legacy_dict`) are wired in `__init__.py`. This
 module owns the actual rendering primitives.
 
 The heatmap code was extracted from the former WG directivity renderer. The
 legacy ``[[angle, dB], ...]`` per-frequency dict shape is preserved via the
-adapter ``directivity_heatmap_from_legacy_dict``; new callers should prefer the
-numpy-array signature ``directivity_heatmap_b64``.
+adapter ``directivity_heatmap_from_legacy_dict``; callers that already hold
+numpy arrays compose ``prepare_heatmap_data`` and ``render_single_heatmap``.
 """
 
 from __future__ import annotations
@@ -275,7 +275,7 @@ def _interpolate_heatmap_grid(angles, freqs, values, angle_samples, freq_samples
     return target_angles, np.power(10.0, target_log_freqs), full_interp
 
 
-def check_symmetry(h_values, v_values):
+def _check_symmetry(h_values, v_values):
     """Check if H and V patterns are effectively identical (within 1% of max)."""
     if h_values is None or v_values is None:
         return False
@@ -722,7 +722,7 @@ def _planes_are_symmetric(horizontal, vertical):
     return (
         np.array_equal(horizontal["angles_raw"], vertical["angles_raw"])
         and np.array_equal(horizontal["freqs_raw"], vertical["freqs_raw"])
-        and check_symmetry(horizontal["values_raw"], vertical["values_raw"])
+        and _check_symmetry(horizontal["values_raw"], vertical["values_raw"])
     )
 
 
@@ -861,82 +861,3 @@ def save_directivity_plot(
     )
     plt.close(fig)
     return out
-
-
-# ---------------------------------------------------------------------------
-# Numpy-array signature (preferred for new callers)
-# ---------------------------------------------------------------------------
-
-def directivity_heatmap_b64(
-    freq_hz,
-    angles_deg,
-    spl_db,
-    *,
-    title=None,
-    reference_level=-6.0,
-    dpi=150,
-    theme=None,
-    colors=None,
-    smooth=False,
-    smoothing_fraction=FRACTIONAL_OCTAVE,
-    display_range_db=(MIN_DB, MAX_DB),
-):
-    """Render a single directivity heatmap and return base64 PNG (no prefix).
-
-    Args:
-        freq_hz: 1D array, ``(n_freq,)``.
-        angles_deg: 1D array, ``(n_angle,)``.
-        spl_db: 2D array, ``(n_angle, n_freq)``, already normalized.
-        title: Plot title. Defaults to "Normalized Directivity".
-        reference_level: dB level for prominent contour (default -6).
-        display_range_db: Clipping and colour-scale limits (default (-30, 0)).
-        smooth: Apply fractional-octave smoothing after canonical interpolation.
-        smoothing_fraction: Fractional-octave denominator (default 24).
-
-    Returns:
-        Base64-encoded PNG string (without data URI prefix), or None when
-        the inputs are empty.
-    """
-    freqs = np.asarray(freq_hz, dtype=float)
-    angles = np.asarray(angles_deg, dtype=float)
-    values_raw = np.asarray(spl_db, dtype=float)
-    if freqs.size == 0 or angles.size == 0:
-        return None
-
-    theme_obj = apply_theme_overrides(theme, colors=colors)
-    angles_p, freqs_p, values_p = prepare_heatmap_data(
-        angles,
-        freqs,
-        values_raw,
-        smooth=smooth,
-        smoothing_fraction=smoothing_fraction,
-        display_range_db=display_range_db,
-    )
-
-    with theme_rc_context(theme_obj):
-        fig, ax = plt.subplots(1, 1, figsize=(11, 5))
-        fig.patch.set_facecolor(theme_obj.figure_bg)
-        render_single_heatmap(
-            ax,
-            freqs_p,
-            angles_p,
-            values_p,
-            title or "Normalized Directivity",
-            reference_level=reference_level,
-            theme=theme_obj,
-            display_range_db=display_range_db,
-        )
-        fig.tight_layout(pad=1.5)
-
-    buf = io.BytesIO()
-    fig.savefig(
-        buf,
-        format="png",
-        dpi=dpi,
-        facecolor=fig.get_facecolor(),
-        edgecolor="none",
-        bbox_inches="tight",
-    )
-    plt.close(fig)
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode("ascii")

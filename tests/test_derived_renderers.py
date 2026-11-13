@@ -17,128 +17,12 @@ from hornlab_plots.derived import (
     POLAR_POWER_APPROXIMATION_NOTE,
     _build_beamwidth_figure,
     _build_directivity_power_figure,
-    _build_excursion_figure,
-    _build_group_delay_figure,
-    _build_interference_figure,
 )
-
-SPEED_OF_SOUND_M_S = 343.0
-
-
-def _synthetic_pressure_pair(n_freq=12, n_angle=13, planes=2):
-    """Two engineering-convention pressure grids with real interference.
-
-    Source B sits 0.1 m behind A along the axis projected per angle, so the
-    coherent sum develops angle/frequency comb structure.
-    """
-    freqs = np.geomspace(200.0, 8000.0, n_freq)
-    angles = np.linspace(0.0, 90.0, n_angle)
-    k = 2.0 * np.pi * freqs / SPEED_OF_SOUND_M_S
-    path_m = 0.1 * np.cos(np.deg2rad(angles))
-    phase = np.exp(-1j * k[:, None, None] * path_m[None, None, :])
-    a = np.ones((n_freq, planes, n_angle), dtype=complex)
-    b = 0.8 * np.ones_like(a) * phase
-    return freqs, angles, {"A": a, "B": b}
 
 
 def test_derived_renderer_exports_are_available():
-    assert callable(hlp.interference_ratio_db)
-    assert callable(hlp.save_interference_heatmap)
     assert callable(hlp.save_directivity_power_plot)
     assert callable(hlp.save_beamwidth_plot)
-    assert callable(hlp.save_group_delay_plot)
-    assert callable(hlp.save_excursion_plot)
-
-
-def test_interference_ratio_db_math():
-    """0 dB for fully coherent addition; deeply negative for anti-phase."""
-    grid = np.full((4, 1, 5), 1.0 + 0.5j, dtype=complex)
-    ratio = hlp.interference_ratio_db({"A": grid, "B": grid.copy()})
-    np.testing.assert_allclose(ratio, 0.0, atol=1e-12)
-
-    single = hlp.interference_ratio_db({"A": grid})
-    np.testing.assert_allclose(single, 0.0, atol=1e-12)
-
-    anti = hlp.interference_ratio_db({"A": grid, "B": -grid})
-    assert np.all(anti < -100.0)
-
-    # Subset selection via members and shape validation.
-    partial = hlp.interference_ratio_db({"A": grid, "B": -grid, "C": grid}, members=["A", "C"])
-    np.testing.assert_allclose(partial, 0.0, atol=1e-12)
-    with pytest.raises(ValueError):
-        hlp.interference_ratio_db({"A": grid, "B": grid[:, :, :-1]})
-    with pytest.raises(ValueError):
-        hlp.interference_ratio_db({})
-
-
-def test_interference_ratio_db_matches_ordered_sum_without_mutating_inputs():
-    rng = np.random.default_rng(260728)
-    sources = {
-        name: rng.standard_normal((7, 2, 5))
-        + 1j * rng.standard_normal((7, 2, 5))
-        for name in ("LF", "MF", "HF")
-    }
-    sources["MF"] = sources["MF"].astype(np.complex64)
-    originals = {name: grid.copy() for name, grid in sources.items()}
-    grids = [np.asarray(grid, dtype=np.complex128) for grid in sources.values()]
-    expected = 20.0 * np.log10(
-        np.maximum(np.abs(sum(grids)), 1.0e-30)
-        / np.maximum(sum(np.abs(grid) for grid in grids), 1.0e-30)
-    )
-
-    actual = hlp.interference_ratio_db(sources)
-
-    np.testing.assert_array_equal(actual, expected)
-    for name, grid in sources.items():
-        np.testing.assert_array_equal(grid, originals[name])
-
-
-def test_save_interference_heatmap_to_disk(tmp_path):
-    freqs, angles, sources = _synthetic_pressure_pair()
-    out = tmp_path / "interference.png"
-    result = hlp.save_interference_heatmap(
-        out,
-        freqs,
-        sources,
-        angles,
-        ("horizontal", "vertical"),
-        crossovers_hz=[800.0],
-        mesh_valid_hz=3600.0,
-        mesh_valid_radiating_hz=6000.0,
-    )
-    assert result == out
-    assert out.exists()
-    assert out.stat().st_size > 500
-
-
-def test_save_interference_heatmap_single_plane(tmp_path):
-    freqs, angles, sources = _synthetic_pressure_pair(planes=1)
-    out = tmp_path / "interference_h.png"
-    result = hlp.save_interference_heatmap(out, freqs, sources, angles, ("horizontal",))
-    assert result == out
-    assert out.exists()
-
-
-def test_interference_figure_annotates_crossovers_and_validates_shapes():
-    freqs, angles, sources = _synthetic_pressure_pair()
-    fig = _build_interference_figure(
-        freqs,
-        sources,
-        angles,
-        ("horizontal", "vertical"),
-        crossovers_hz=[800.0],
-    )
-    try:
-        texts = [t.get_text() for ax in fig.axes for t in ax.texts]
-        assert any("XO 800 Hz" in text for text in texts)
-        titles = [ax.get_title() for ax in fig.axes]
-        assert "H Driver Interference (0 dB = coherent sum)" in titles
-        assert "V Driver Interference (0 dB = coherent sum)" in titles
-    finally:
-        plt.close(fig)
-
-    with pytest.raises(ValueError):
-        _build_interference_figure(freqs, sources, angles, ("horizontal",))  # plane count mismatch
 
 
 def test_save_directivity_power_plot_to_disk(tmp_path):
@@ -220,67 +104,14 @@ def test_beamwidth_figure_symmetry_footnote_and_ylim():
         plt.close(fig)
 
 
-def test_save_group_delay_plot_to_disk(tmp_path):
-    freqs = np.geomspace(100.0, 20000.0, 40)
-    group_delay_s = 1.0e-3 * (1.0 + 0.2 * np.sin(np.log10(freqs) * 3.0))
-    group_delay_s[5] = np.nan  # ambiguous bin: the trace simply breaks
-    out = tmp_path / "group_delay.png"
-    result = hlp.save_group_delay_plot(
-        out,
-        freqs,
-        group_delay_s,
-        mesh_valid_hz=9000.0,
-    )
-    assert result == out
-    assert out.exists()
-    assert out.stat().st_size > 500
-
-
-def test_save_excursion_plot_to_disk_with_xmax(tmp_path):
-    freqs = np.geomspace(20.0, 2000.0, 40)
-    excursion_m = 2.0e-3 / (1.0 + (freqs / 120.0) ** 2)
-    out = tmp_path / "excursion.png"
-    result = hlp.save_excursion_plot(
-        out,
-        freqs,
-        excursion_m,
-        label="MF",
-        xmax_m=1.5e-3,
-    )
-    assert result == out
-    assert out.exists()
-    assert out.stat().st_size > 500
-
-
-def test_excursion_figure_draws_xmax_marker_in_mm():
-    freqs = np.geomspace(20.0, 2000.0, 40)
-    excursion_m = 2.0e-3 / (1.0 + (freqs / 120.0) ** 2)
-    fig = _build_excursion_figure(freqs, excursion_m, label="MF", xmax_m=1.5e-3)
-    try:
-        ax = fig.axes[0]
-        assert ax.get_title() == "MF Cone Excursion"
-        labels = [t.get_text() for t in ax.get_legend().get_texts()]
-        assert "MF" in labels and "Xmax" in labels
-        horizontal = [
-            line
-            for line in ax.get_lines()
-            if line.get_label() == "Xmax"
-        ]
-        assert len(horizontal) == 1
-        np.testing.assert_allclose(horizontal[0].get_ydata(), 1.5)  # mm
-        assert horizontal[0].get_linestyle() == "--"
-    finally:
-        plt.close(fig)
-
-
 def test_derived_charts_honor_theme():
     """Key style values follow the requested theme, including the designed
     themes' rc_params grid style."""
     freqs = np.geomspace(100.0, 20000.0, 30)
-    group_delay_s = 1.0e-3 * np.ones(freqs.size)
+    beamwidths = {"horizontal": np.full(freqs.size, 120.0)}
 
     granite = hlp.get_theme("granite")
-    fig = _build_group_delay_figure(freqs, group_delay_s, theme="granite")
+    fig = _build_beamwidth_figure(freqs, beamwidths, theme="granite")
     try:
         ax = fig.axes[0]
         assert (
@@ -304,7 +135,7 @@ def test_derived_charts_honor_theme():
         plt.close(fig)
 
     hornlab = hlp.get_theme("hornlab")
-    fig = _build_group_delay_figure(freqs, group_delay_s)
+    fig = _build_beamwidth_figure(freqs, beamwidths)
     try:
         ax = fig.axes[0]
         assert (

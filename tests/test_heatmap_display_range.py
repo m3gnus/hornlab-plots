@@ -38,7 +38,7 @@ def test_display_range_reaches_preparation_and_mesh(reference_level):
         plt.close(fig)
 
 
-@pytest.mark.parametrize("api", ["legacy", "array", "file"])
+@pytest.mark.parametrize("api", ["legacy", "file"])
 @pytest.mark.parametrize("reference_level", [-3.0, -6.0, -9.0, -12.0])
 def test_public_map_apis_forward_display_range(monkeypatch, tmp_path, api, reference_level):
     captured = []
@@ -67,9 +67,6 @@ def test_public_map_apis_forward_display_range(monkeypatch, tmp_path, api, refer
             **kwargs,
         )
         assert captured == ["prepare", "prepare", "render"]
-    elif api == "array":
-        result = heatmap.directivity_heatmap_b64(FREQUENCIES, ANGLES, VALUES, **kwargs)
-        assert captured == ["prepare", "render"]
     else:
         result = heatmap.save_directivity_plot(
             tmp_path / "map.png", FREQUENCIES, DIRECTIVITY, **kwargs,
