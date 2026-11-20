@@ -19,6 +19,9 @@ Public API:
 - ``render_all_charts_b64(payload)`` — convenience: returns dict with
   ``frequency_response``, ``directivity_index``, ``impedance``,
   ``directivity_map`` keys.
+- ``chart_spec_b64(spec)`` — a chart described as data (axes, series, shaded
+  bands, or a polar cut), drawn in the active theme. Consumers use it for
+  every saved image of a chart they also draw interactively.
 
 Derived-output renderers (ported from the Fusion addin):
 
@@ -67,6 +70,7 @@ from .charts import (
     set_spl_window,
     spl_window,
 )
+from .spec import build_chart_spec_figure, chart_spec_b64
 from .derived import (
     FULL_SPHERE_POWER_NOTE,
     PARTIAL_CAP_POWER_NOTE,
@@ -112,6 +116,9 @@ __all__ = [
     "FrequencyResponseCurve",
     "set_spl_window",
     "spl_window",
+    # Charts described as data
+    "chart_spec_b64",
+    "build_chart_spec_figure",
     # Derived-output renderers (Fusion addin ports)
     "FULL_SPHERE_POWER_NOTE",
     "PARTIAL_CAP_POWER_NOTE",

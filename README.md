@@ -73,6 +73,17 @@ metrics = hlp.sphere_power_metrics(
     distance_m=2.0,
 )
 hlp.save_beamwidth_plot(path, freqs, {"horizontal": bw_h, "vertical": bw_v})
+
+# A chart described as data: axes, series, shaded bands, or a polar cut.
+# Colours are theme roles (palette slot, "accent", "ink", "muted"), so the
+# theme owns every hue. Waveguide Generator renders every saved image of an
+# on-screen chart this way; see hornlab_plots/spec.py for the full shape.
+b64 = hlp.chart_spec_b64({
+    "title": "Group delay",
+    "x": {"label": "Frequency [Hz]", "scale": "log"},
+    "y": {"label": "Group delay [ms]"},
+    "series": [{"label": "Run 1", "x": freqs, "y": delay_ms, "color": 0}],
+}, theme="classic")
 ```
 
 ### Canonical Frequency-Response Rules
