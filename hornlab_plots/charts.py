@@ -111,6 +111,42 @@ def _apply_canonical_axes(
     )
 
 
+def _themed_legend(ax, *args, theme, fontsize=9, alpha=0.92, **kwargs):
+    """A legend on the theme's axes ground, ink and spine, slightly see-through."""
+    legend = ax.legend(
+        *args,
+        fontsize=fontsize,
+        facecolor=theme.axes_bg,
+        edgecolor=theme.spine_color,
+        labelcolor=theme.text_color,
+        **kwargs,
+    )
+    legend.get_frame().set_alpha(alpha)
+    return legend
+
+
+def _style_twin_axis(
+    ax2,
+    label,
+    *,
+    label_color,
+    tick_color,
+    spine_color,
+    fontsize=11,
+    labelsize=9,
+    facecolor="none",
+    tick_axis="y",
+    top_spine_color=None,
+):
+    """Style the right-hand value axis of a twin-axis chart."""
+    ax2.set_facecolor(facecolor)
+    ax2.set_ylabel(label, color=label_color, fontsize=fontsize)
+    ax2.tick_params(axis=tick_axis, colors=tick_color, labelsize=labelsize)
+    ax2.spines["right"].set_color(spine_color)
+    if top_spine_color is not None:
+        ax2.spines["top"].set_color(top_spine_color)
+
+
 def _add_log_grid(ax, freq_min, freq_max, *, detailed=False, theme=None, colors=None):
     """Add log-frequency grid lines matching the directivity-heatmap style."""
     theme_obj = apply_theme_overrides(theme, colors=colors)
@@ -473,11 +509,14 @@ def _build_frequency_response_figure(
                     "imaginary", theme_obj.reference_contour_color
                 )
                 phase_ax = ax.twinx()
-                phase_ax.set_facecolor("none")
-                phase_ax.set_ylabel("Phase [deg]", color=phase_color, fontsize=11)
-                phase_ax.tick_params(axis="y", colors=phase_color, labelsize=9)
-                phase_ax.spines["right"].set_color(phase_color)
-                phase_ax.spines["top"].set_color(theme_obj.spine_color)
+                _style_twin_axis(
+                    phase_ax,
+                    "Phase [deg]",
+                    label_color=phase_color,
+                    tick_color=phase_color,
+                    spine_color=phase_color,
+                    top_spine_color=theme_obj.spine_color,
+                )
                 phase_ax.semilogx(
                     pf, pdeg, color=phase_color, linewidth=1.25,
                     linestyle="--", label="Phase (referenced)",
@@ -492,16 +531,7 @@ def _build_frequency_response_figure(
             ph_handles, ph_labels = phase_ax.get_legend_handles_labels()
             handles += ph_handles
             labels += ph_labels
-        legend = ax.legend(
-            handles,
-            labels,
-            loc="best",
-            fontsize=9,
-            facecolor=theme_obj.axes_bg,
-            edgecolor=theme_obj.spine_color,
-            labelcolor=theme_obj.text_color,
-        )
-        legend.get_frame().set_alpha(0.92)
+        _themed_legend(ax, handles, labels, theme=theme_obj, loc="best")
         fig.tight_layout(pad=1.5)
         return fig
 

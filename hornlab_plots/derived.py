@@ -21,7 +21,7 @@ from matplotlib.ticker import FuncFormatter
 from ._grid import freq_formatter, log_grid_lines, preferred_frequency_ticks
 from ._heatmap import _draw_mesh_valid_markers
 from ._png import save_png
-from .charts import _apply_canonical_axes
+from .charts import _apply_canonical_axes, _style_twin_axis, _themed_legend
 from .style import (
     apply_theme_overrides,
     theme_grid_kwargs,
@@ -429,12 +429,17 @@ def _build_directivity_power_figure(
             alpha=0.82,
             label="Power response",
         )
-        ax2.set_ylabel(
-            "Power response [dB SPL avg]", color=theme_obj.text_color, fontsize=10
+        _style_twin_axis(
+            ax2,
+            "Power response [dB SPL avg]",
+            label_color=theme_obj.text_color,
+            tick_color=theme_obj.tick_color,
+            spine_color=theme_obj.spine_color,
+            fontsize=10,
+            labelsize=8,
+            facecolor=theme_obj.axes_bg,
+            tick_axis="both",
         )
-        ax2.tick_params(colors=theme_obj.tick_color, labelsize=8)
-        ax2.set_facecolor(theme_obj.axes_bg)
-        ax2.spines["right"].set_color(theme_obj.spine_color)
         # Styled after the twin axis: ``ax2.semilogx`` re-applies the shared
         # log x-scale, which resets the canonical tick locator/formatter the
         # addin installed beforehand (its DI chart lost the preferred
@@ -457,16 +462,7 @@ def _build_directivity_power_figure(
             if not str(line.get_label()).startswith("_")
         ]
         labels = [line.get_label() for line in lines]
-        legend = ax.legend(
-            lines,
-            labels,
-            loc="best",
-            fontsize=9,
-            facecolor=theme_obj.axes_bg,
-            edgecolor=theme_obj.spine_color,
-            labelcolor=theme_obj.text_color,
-        )
-        legend.get_frame().set_alpha(0.92)
+        _themed_legend(ax, lines, labels, theme=theme_obj, loc="best")
         if footnote:
             fig.text(
                 0.5,
@@ -578,14 +574,7 @@ def _build_beamwidth_figure(
             ylabel="-6 dB beamwidth [deg]",
             theme=theme_obj,
         )
-        legend = ax.legend(
-            loc="best",
-            fontsize=9,
-            facecolor=theme_obj.axes_bg,
-            edgecolor=theme_obj.spine_color,
-            labelcolor=theme_obj.text_color,
-        )
-        legend.get_frame().set_alpha(0.92)
+        _themed_legend(ax, theme=theme_obj, loc="best")
         if assumed_symmetric_from_one_sided_grid:
             fig.text(
                 0.5,

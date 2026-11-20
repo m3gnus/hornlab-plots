@@ -98,3 +98,67 @@ def test_empty_spec_draws_nothing():
 def test_invalid_spec_is_refused(bad):
     with pytest.raises(ValueError):
         hlp.chart_spec_b64(bad)
+
+
+def _polar_spec(**radius):
+    angles = list(range(-180, 181, 30))
+    return {
+        "kind": "polar",
+        "r": {"min": -30, "max": 0, **radius},
+        "series": [{"label": "Run", "angle": angles, "r": [2.0 if a == 30 else -abs(a) / 10 for a in angles]}],
+    }
+
+
+def test_polar_values_above_the_ring_are_drawn_as_given():
+    fig = build_chart_spec_figure(_polar_spec(), theme="classic")
+    line = next(line for line in fig.axes[0].get_lines() if line.get_label() == "Run")
+    # Not clamped onto the 0 dB ring: the axes' clip path cuts the trace.
+    assert 2.0 in list(line.get_ydata())
+    assert line.get_clip_on()
+
+
+def test_a_missing_polar_angle_is_a_gap():
+    spec = _polar_spec()
+    spec["series"][0]["angle"][3] = None
+    fig = build_chart_spec_figure(spec, theme="classic")
+    line = next(line for line in fig.axes[0].get_lines() if line.get_label() == "Run")
+    assert np.isnan(line.get_xdata()[3])
+
+
+def test_marked_points_get_hollow_markers():
+    spec = _lines_spec()
+    spec["series"][0]["markers"] = [2, 5, 99]
+    fig = build_chart_spec_figure(spec, theme="classic")
+    markers = [line for line in fig.axes[0].get_lines() if line.get_marker() == "o"]
+    assert len(markers) == 1
+    np.testing.assert_allclose(markers[0].get_ydata(), [0.2, 0.5])
+
+
+@pytest.mark.parametrize("spec", [
+    _polar_spec(step=0.001),
+    _polar_spec(min=-2000, step=1),
+    {"x": {"scale": "log", "min": 1e-300, "max": 1e300}, "series": [{"x": [100, 200], "y": [1, 2]}]},
+    {"series": [{"x": [1e-300, 1e300], "y": [1, 2]}]},
+    {"series": ["x"]},
+    {"x": 5, "series": [{"x": [100, 200], "y": [1, 2]}]},
+    "not a mapping",
+])
+def test_costly_or_malformed_specs_are_refused_quickly_without_leaking_figures(spec):
+    import time
+
+    import matplotlib.pyplot as plt
+
+    open_before = set(plt.get_fignums())
+    started = time.perf_counter()
+    with pytest.raises(ValueError):
+        hlp.chart_spec_b64(spec)
+    assert time.perf_counter() - started < 2.0
+    assert set(plt.get_fignums()) == open_before
+
+
+def test_an_empty_chart_leaves_no_figure_open():
+    import matplotlib.pyplot as plt
+
+    open_before = set(plt.get_fignums())
+    assert hlp.chart_spec_b64({"series": [{"x": [100, 200], "y": [None, None]}]}) is None
+    assert set(plt.get_fignums()) == open_before

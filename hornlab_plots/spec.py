@@ -22,7 +22,8 @@ Spec shape (``kind`` defaults to ``"lines"``)::
       "y": {"label": "Group delay [ms]", "min": null, "max": null},
       "y2": {"label": "Phase [deg]"},            # optional right-hand axis
       "series": [{"label": "Run 1", "x": [...], "y": [...], "axis": 0,
-                  "color": 0, "style": "solid", "width": 2, "opacity": 1}],
+                  "color": 0, "style": "solid", "width": 2, "opacity": 1,
+                  "markers": [3, 7]}],   # optional hollow circles at indices
       "bands": [{"x0": 4000, "x1": 6000, "label": "Unqualified"}],
       "hlines": [{"y": 0, "axis": 0}],
     }
@@ -43,7 +44,7 @@ numbers the consumer put on its screen.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 import matplotlib
@@ -56,7 +57,7 @@ from matplotlib.ticker import FuncFormatter
 
 from ._grid import freq_formatter
 from ._png import fig_to_b64
-from .charts import _add_log_grid, _apply_canonical_axes
+from .charts import _add_log_grid, _apply_canonical_axes, _style_twin_axis, _themed_legend
 from .style import apply_theme_overrides, theme_rc_context
 
 LINE_FIGSIZE = (10.0, 4.8)
@@ -64,6 +65,11 @@ POLAR_FIGSIZE = (7.0, 7.0)
 # Screen widths are CSS pixels; the canonical charts draw a primary trace at
 # 1.65 pt against the screen's 2 px.
 _WIDTH_SCALE = 0.825
+# Bounds on the work a spec can ask for: the rings and log grid lines are
+# drawn one by one, so an absurd step or span would take minutes.
+MAX_POLAR_RINGS = 60
+MAX_LOG_DECADES = 8
+_LOG_SPAN_REFUSED = f"a log frequency axis must start above 0 and span at most {MAX_LOG_DECADES} decades"
 _LINESTYLES = {"solid": "-", "dashed": "--", "dotted": ":", "dashdot": "-."}
 
 
@@ -102,19 +108,16 @@ def _line_kwargs(theme_obj, series: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _legend(ax, handles, labels, theme_obj, **kwargs) -> None:
-    if not handles:
-        return
-    legend = ax.legend(
-        handles,
-        labels,
-        fontsize=9,
-        facecolor=theme_obj.axes_bg,
-        edgecolor=theme_obj.spine_color,
-        labelcolor=theme_obj.text_color,
-        **kwargs,
-    )
-    legend.get_frame().set_alpha(0.92)
+def _marker_mask(indices, keep: np.ndarray) -> np.ndarray | None:
+    """Which kept points carry a marker, from indices into the series as sent."""
+    if not indices:
+        return None
+    full = np.zeros(keep.size, dtype=bool)
+    for index in indices:
+        index = int(index)
+        if 0 <= index < keep.size:
+            full[index] = True
+    return full[keep]
 
 
 def _title(ax, spec: Mapping[str, Any], theme_obj) -> None:
@@ -149,11 +152,30 @@ def _limits(axis: Mapping[str, Any] | None) -> tuple[float | None, float | None]
     )
 
 
-def _build_lines_figure(spec: Mapping[str, Any], theme_obj):
-    series_specs: Sequence[Mapping[str, Any]] = spec.get("series") or []
-    x_axis = spec.get("x") or {}
+def _mapping(value, what: str) -> Mapping[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{what} must be a mapping")
+    return value
+
+
+def _entries(value, what: str) -> list[Mapping[str, Any]]:
+    if value is None:
+        return []
+    if not isinstance(value, (list, tuple)):
+        raise ValueError(f"{what} must be a list")
+    return [_mapping(item, f"each entry of {what}") for item in value]
+
+
+def _build_lines_figure(fig, spec: Mapping[str, Any], theme_obj):
+    series_specs = _entries(spec.get("series"), "series")
+    x_axis = _mapping(spec.get("x"), "x")
     log_x = str(x_axis.get("scale", "log")) == "log"
-    fig, ax = plt.subplots(1, 1, figsize=LINE_FIGSIZE)
+    x_lo, x_hi = _limits(x_axis)
+    if log_x and x_lo is not None and x_lo <= 0.0:
+        raise ValueError(_LOG_SPAN_REFUSED)
+    ax = fig.add_subplot(1, 1, 1)
     fig.patch.set_facecolor(theme_obj.figure_bg)
     second = None
     drawn_x: list[np.ndarray] = []
@@ -173,10 +195,19 @@ def _build_lines_figure(spec: Mapping[str, Any], theme_obj):
                 second.set_facecolor("none")
             target = second
         label = series.get("label")
-        target.plot(x, y, label=str(label) if label else "_nolegend_", **_line_kwargs(theme_obj, series))
+        style = _line_kwargs(theme_obj, series)
+        target.plot(x, y, label=str(label) if label else "_nolegend_", **style)
+        marked = _marker_mask(series.get("markers"), keep)
+        if marked is not None and np.any(marked):
+            # Hollow circles on the points the consumer marks (for example
+            # reconstructed, not solved, frequencies).
+            target.plot(
+                x[marked], y[marked], linestyle="none", marker="o", markersize=4,
+                markerfacecolor="none", markeredgecolor=style["color"],
+                alpha=style["alpha"], zorder=style["zorder"], label="_nolegend_",
+            )
         drawn_x.append(x)
     if not drawn_x:
-        plt.close(fig)
         return None
 
     if log_x:
@@ -192,9 +223,10 @@ def _build_lines_figure(spec: Mapping[str, Any], theme_obj):
     _title(ax, spec, theme_obj)
     data_lo = min(float(np.min(values)) for values in drawn_x)
     data_hi = max(float(np.max(values)) for values in drawn_x)
-    x_lo, x_hi = _limits(x_axis)
     x_lo = data_lo if x_lo is None else x_lo
     x_hi = data_hi if x_hi is None else x_hi
+    if log_x and x_hi > x_lo and math.log10(x_hi / x_lo) > MAX_LOG_DECADES:
+        raise ValueError(_LOG_SPAN_REFUSED)
     if x_hi > x_lo:
         ax.set_xlim(x_lo, x_hi)
     if log_x:
@@ -202,16 +234,16 @@ def _build_lines_figure(spec: Mapping[str, Any], theme_obj):
         ax.xaxis.set_minor_formatter(FuncFormatter(lambda _value, _pos: ""))
         lo, hi = ax.get_xlim()
         _add_log_grid(ax, lo, hi, detailed=True, theme=theme_obj)
-    y_lo, y_hi = _limits(spec.get("y"))
+    y_lo, y_hi = _limits(_mapping(spec.get("y"), "y"))
     if y_lo is not None or y_hi is not None:
         ax.set_ylim(y_lo, y_hi)
 
-    for line in spec.get("hlines") or []:
+    for line in _entries(spec.get("hlines"), "hlines"):
         target = second if int(line.get("axis", 0)) == 1 and second is not None else ax
         target.axhline(float(line["y"]), color=theme_obj.tick_color, linewidth=0.8, alpha=0.45, zorder=1)
 
     band_handle = None
-    for band in spec.get("bands") or []:
+    for band in _entries(spec.get("bands"), "bands"):
         ax.axvspan(
             float(band["x0"]),
             float(band["x1"]),
@@ -232,11 +264,14 @@ def _build_lines_figure(spec: Mapping[str, Any], theme_obj):
             )
 
     if second is not None:
-        y2 = spec.get("y2") or {}
-        second.set_ylabel(str(y2.get("label") or ""), color=theme_obj.text_color, fontsize=11)
-        second.tick_params(colors=theme_obj.tick_color, labelsize=9)
-        for spine in second.spines.values():
-            spine.set_color(theme_obj.spine_color)
+        y2 = _mapping(spec.get("y2"), "y2")
+        _style_twin_axis(
+            second,
+            str(y2.get("label") or ""),
+            label_color=theme_obj.text_color,
+            tick_color=theme_obj.tick_color,
+            spine_color=theme_obj.spine_color,
+        )
         y2_lo, y2_hi = _limits(y2)
         if y2_lo is not None or y2_hi is not None:
             second.set_ylim(y2_lo, y2_hi)
@@ -249,22 +284,24 @@ def _build_lines_figure(spec: Mapping[str, Any], theme_obj):
     if band_handle is not None:
         handles.append(band_handle)
         labels.append(band_handle.get_label())
-    _legend(ax, handles, labels, theme_obj, loc="best")
+    if handles:
+        _themed_legend(ax, handles, labels, theme=theme_obj, loc="best")
     fig.tight_layout(pad=1.5)
     return fig
 
 
-def _build_polar_figure(spec: Mapping[str, Any], theme_obj):
-    radius = spec.get("r") or {}
+def _build_polar_figure(fig, spec: Mapping[str, Any], theme_obj):
+    radius = _mapping(spec.get("r"), "r")
     r_lo, r_hi = _limits(radius)
     r_lo = -30.0 if r_lo is None else r_lo
     r_hi = 0.0 if r_hi is None else r_hi
     if not r_hi > r_lo:
         raise ValueError("polar radius range is reversed or empty")
     step = float(radius.get("step") or (10.0 if abs(r_hi - r_lo) >= 30 else 5.0))
+    if not step > 0.0 or (r_hi - r_lo) / step > MAX_POLAR_RINGS:
+        raise ValueError(f"the polar ring step must be positive and give at most {MAX_POLAR_RINGS} rings")
     unit = str(radius.get("unit") or "dB")
 
-    fig = plt.figure(figsize=POLAR_FIGSIZE)
     fig.patch.set_facecolor(theme_obj.figure_bg)
     ax = fig.add_subplot(projection="polar")
     ax.set_facecolor(theme_obj.axes_bg)
@@ -274,7 +311,7 @@ def _build_polar_figure(spec: Mapping[str, Any], theme_obj):
     ax.set_thetalim(-math.pi, math.pi)
     ax.set_rlim(r_lo, r_hi)
     drawn = False
-    for series in spec.get("series") or []:
+    for series in _entries(spec.get("series"), "series"):
         angle = _floats(series.get("angle"))
         level = _floats(series.get("r"))
         count = min(angle.size, level.size)
@@ -284,15 +321,16 @@ def _build_polar_figure(spec: Mapping[str, Any], theme_obj):
         label = series.get("label")
         ax.plot(
             np.radians(angle),
-            np.clip(level, r_lo, r_hi),
+            # Drawn as given: the polar axes' own clip path cuts anything
+            # beyond the outer ring, as the screen's polar coordinate system does.
+            level,
             label=str(label) if label else "_nolegend_",
             **_line_kwargs(theme_obj, series),
         )
         drawn = True
     if not drawn:
-        plt.close(fig)
         return None
-    for wedge in spec.get("shade") or []:
+    for wedge in _entries(spec.get("shade"), "shade"):
         theta = np.radians(np.linspace(float(wedge["from"]), float(wedge["to"]), 37))
         ax.fill_between(
             theta, r_lo, r_hi, color=theme_obj.tick_color, alpha=0.12, linewidth=0,
@@ -329,23 +367,39 @@ def _build_polar_figure(spec: Mapping[str, Any], theme_obj):
             color=theme_obj.tick_color,
         )
     handles, labels = ax.get_legend_handles_labels()
-    _legend(ax, handles, labels, theme_obj, loc="upper center", bbox_to_anchor=(0.5, -0.06), ncol=min(3, max(1, len(handles))))
+    if handles:
+        _themed_legend(
+            ax, handles, labels, theme=theme_obj,
+            loc="upper center", bbox_to_anchor=(0.5, -0.06), ncol=min(3, len(handles)),
+        )
     fig.tight_layout(pad=1.5)
     return fig
 
 
-_BUILDERS = {"lines": _build_lines_figure, "polar": _build_polar_figure}
+_BUILDERS = {
+    "lines": (_build_lines_figure, LINE_FIGSIZE),
+    "polar": (_build_polar_figure, POLAR_FIGSIZE),
+}
 
 
 def build_chart_spec_figure(spec: Mapping[str, Any], *, theme=None):
     """Build the matplotlib figure for ``spec``; ``None`` when nothing is drawable."""
+    spec = _mapping(spec, "a chart spec")
     kind = str(spec.get("kind") or "lines")
-    builder = _BUILDERS.get(kind)
-    if builder is None:
+    if kind not in _BUILDERS:
         raise ValueError(f"chart kind must be one of: {', '.join(_BUILDERS)}")
+    builder, figsize = _BUILDERS[kind]
     theme_obj = apply_theme_overrides(theme)
     with theme_rc_context(theme_obj):
-        return builder(spec, theme_obj)
+        fig = plt.figure(figsize=figsize)
+        try:
+            drawn = builder(fig, spec, theme_obj)
+        except BaseException:
+            plt.close(fig)
+            raise
+        if drawn is None:
+            plt.close(fig)
+        return drawn
 
 
 def chart_spec_b64(spec: Mapping[str, Any], dpi=150, *, theme=None) -> str | None:
