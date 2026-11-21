@@ -245,3 +245,47 @@ def test_spherical_specs_are_checked(bad):
     with pytest.raises(ValueError):
         hlp.chart_spec_b64(bad)
     assert set(plt.get_fignums()) == open_before
+
+
+@pytest.mark.parametrize("span", [30, 35, 45])
+def test_level_colour_bar_is_labelled_at_0_db(span):
+    fig = build_chart_spec_figure(_sphere_spec("beam_map", range_db=span), theme="classic")
+    ticks = list(fig.axes[-1].get_yticks())
+    assert ticks[-1] == pytest.approx(0.0)
+    assert all(tick >= -span - 1e-9 for tick in ticks)
+
+
+def test_beam_map_fills_the_disc_when_theta_stops_short_of_90():
+    spec = _sphere_spec("beam_map")
+    keep = [i for i, t in enumerate(spec["theta_deg"]) if 20 <= t <= 60]
+    spec["theta_deg"] = [spec["theta_deg"][i] for i in keep]
+    spec["levels_db"] = [spec["levels_db"][i] for i in keep]
+    fig = build_chart_spec_figure(spec, theme="classic")
+    mesh = fig.axes[0].collections[0]
+    radii = np.asarray(mesh.get_coordinates())[..., 1]
+    # As on screen: the nearest sampled row is read out to the centre and the rim.
+    assert radii.min() == pytest.approx(0.0)
+    assert radii.max() == pytest.approx(90.0)
+
+
+def test_balloon_floor_is_lifted_off_the_page_and_a_dense_grid_stays_quick():
+    import time
+
+    from matplotlib.colors import to_rgba
+
+    from hornlab_plots.style import resolve_theme
+
+    fig = build_chart_spec_figure(_sphere_spec("balloon"), theme="classic")
+    surface = fig.axes[0].collections[0]
+    page = np.asarray(to_rgba(resolve_theme("classic").figure_bg))
+    floor = min(surface.get_facecolor(), key=lambda rgba: float(np.sum(rgba[:3])))
+    # The quietest face is visibly darker than the white page.
+    assert np.sum(page[:3]) - np.sum(np.asarray(floor)[:3]) > 0.15
+
+    theta = np.linspace(0, 180, 361).tolist()
+    phi = np.linspace(0, 360, 554, endpoint=False).tolist()
+    dense = {"kind": "balloon", "theta_deg": theta, "phi_deg": phi, "levels_db": [[-t / 6 for _ in phi] for t in theta]}
+    started = time.perf_counter()
+    _png(hlp.chart_spec_b64(dense, theme="classic"))
+    # It was 13 s before the face budget; a few seconds allows a loaded machine.
+    assert time.perf_counter() - started < 6.0

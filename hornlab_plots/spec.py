@@ -464,7 +464,9 @@ def _level_colorbar(fig, ax, mappable, theme_obj, span: float) -> None:
     bar.set_label("Level [dB re max]", color=theme_obj.text_color, fontsize=10)
     bar.ax.tick_params(colors=theme_obj.tick_color, labelsize=8)
     bar.outline.set_edgecolor(theme_obj.spine_color)
-    bar.set_ticks(np.arange(-span, 0.1, 10.0 if span >= 30 else 5.0))
+    # Counted down from 0 dB, so the top of the bar is always labelled.
+    step = 10.0 if span >= 30 else 5.0
+    bar.set_ticks(np.arange(0.0, -span - step * 1e-6, -step)[::-1])
 
 
 def _heading(fig, spec: Mapping[str, Any], theme_obj) -> None:
@@ -477,6 +479,13 @@ def _build_beam_map_figure(fig, spec: Mapping[str, Any], theme_obj):
     """The forward hemisphere seen head-on: radius is the off-axis angle (0-90 deg), angle is phi."""
     theta, phi, levels, span = _spherical_levels(spec)
     phi, levels = _wrapped(phi, levels)
+    # As on screen, an angle outside the sampled theta reads the nearest
+    # sampled row, so a grid that starts after 0 or stops before 90 degrees
+    # still fills the disc.
+    if theta[0] > 0.0:
+        theta, levels = np.concatenate([[0.0], theta]), np.concatenate([levels[:1], levels])
+    if theta[-1] < 90.0:
+        theta, levels = np.concatenate([theta, [90.0]]), np.concatenate([levels, levels[-1:]])
     fig.patch.set_facecolor(theme_obj.figure_bg)
     ax = fig.add_subplot(projection="polar")
     ax.set_facecolor(theme_obj.axes_bg)
@@ -500,6 +509,9 @@ def _build_beam_map_figure(fig, spec: Mapping[str, Any], theme_obj):
 # The screen's default camera, (2.35, 1.55, 2.75) in the viewer's y-up frame,
 # seen from matplotlib's z-up frame (x, y, z) = (viewer z, x, y).
 BALLOON_AZIMUTH_DEG = math.degrees(math.atan2(2.35, 2.75))
+# Where the balloon's ramp starts, and the face budget of its surface.
+BALLOON_RAMP_FLOOR = 0.15
+MAX_BALLOON_FACES = 30_000
 BALLOON_ELEVATION_DEG = math.degrees(math.atan2(1.55, math.hypot(2.35, 2.75)))
 
 
@@ -514,12 +526,22 @@ def _build_balloon_figure(fig, spec: Mapping[str, Any], theme_obj):
     viewer_y = radius * np.sin(th) * np.sin(ph)
     viewer_z = radius * np.cos(th)
     norm = matplotlib.colors.Normalize(vmin=-span, vmax=0.0)
+    # A ramp whose floor is the page colour (classic's is white) would make
+    # the quiet part of the balloon vanish into the figure, so the surface
+    # starts a little way up the ramp; its colour bar uses the same lifted ramp.
+    ramp = matplotlib.colors.ListedColormap(
+        theme_obj.heatmap_cmap(np.linspace(BALLOON_RAMP_FLOOR, 1.0, 256)), name="balloon_ramp"
+    )
+    # The cost of plot_surface grows with its polygon count; a stride keeps a
+    # dense grid to about MAX_BALLOON_FACES faces (it is a picture, and the
+    # screen draws the same surface at its own resolution).
+    stride = max(1, math.ceil(math.sqrt(levels.size / MAX_BALLOON_FACES)))
     fig.patch.set_facecolor(theme_obj.figure_bg)
     ax = fig.add_subplot(projection="3d")
     ax.set_facecolor(theme_obj.axes_bg)
     ax.plot_surface(
-        viewer_z, viewer_x, viewer_y, facecolors=theme_obj.heatmap_cmap(norm(levels)),
-        rstride=1, cstride=1, linewidth=0.15, edgecolor=(*matplotlib.colors.to_rgb(theme_obj.text_color), 0.12),
+        viewer_z, viewer_x, viewer_y, facecolors=ramp(norm(levels)),
+        rstride=stride, cstride=stride, linewidth=0.15, edgecolor=(*matplotlib.colors.to_rgb(theme_obj.text_color), 0.25),
         antialiased=True, shade=False,
     )
     # The viewer's axes helper: x red, y green, z blue, 1.22 long.
@@ -530,7 +552,7 @@ def _build_balloon_figure(fig, spec: Mapping[str, Any], theme_obj):
     ax.set_box_aspect((1, 1, 1), zoom=1.35)
     ax.view_init(elev=BALLOON_ELEVATION_DEG, azim=BALLOON_AZIMUTH_DEG)
     ax.set_axis_off()
-    mappable = matplotlib.cm.ScalarMappable(norm=norm, cmap=theme_obj.heatmap_cmap)
+    mappable = matplotlib.cm.ScalarMappable(norm=norm, cmap=ramp)
     _level_colorbar(fig, ax, mappable, theme_obj, span)
     _heading(fig, spec, theme_obj)
     return fig
