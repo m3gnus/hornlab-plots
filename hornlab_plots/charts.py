@@ -241,122 +241,6 @@ def _response_curve_style(
     }
 
 
-def _phase_propagation_sign(convention) -> float:
-    """Return the propagation sign for a phase-convention label.
-
-    Documented labels map as follows:
-
-    * ``+1.0`` / ``exp(+ikr)``: ``metal``, ``bempp``, their HornLab engine
-      and device aliases, ``exp(+ikr)``, ``+ikr``, ``e(+ikr)``, ``positive``,
-      and ``positive-spatial``. Both HornLab backends use the outgoing
-      ``exp(+ikr)`` Helmholtz kernel under the ``e^{-i*omega*t}`` convention.
-    * ``-1.0`` / ``exp(-ikr)``: ``""`` (also ``None``), ``auto``,
-      ``default``, ``legacy``, ``exp(-ikr)``, ``-ikr``, and ``e(-ikr)``.
-
-    Matching is case-insensitive. Falsey inputs become the empty string; other
-    inputs are stringified, stripped, lowercased, stripped of literal spaces,
-    and have underscores changed to hyphens. After normalization, any label
-    equal to a known Bempp backend/device name, or containing ``+ikr``,
-    ``+jkr``, ``metal``, or ``positive``, returns ``+1.0``.
-    This also accepts decorated labels such as ``hornlab-metal-bem`` and
-    normalized variants such as ``exp(+jkr)`` or ``positive_spatial``. Every
-    other value, including unknown labels, returns the default ``-1.0``.
-    """
-    key = str(convention or "").strip().lower().replace(" ", "").replace("_", "-")
-    positive_bempp_aliases = {
-        "bempp",
-        "bempp-cl",
-        "bemppcl",
-        "hornlab-bempp-bem",
-        "bempp-cl-numba",
-        "bempp-cl-opencl",
-    }
-    if key in positive_bempp_aliases:
-        return 1.0
-    positive_markers = ("+ikr", "+jkr", "metal", "positive")
-    return 1.0 if any(marker in key for marker in positive_markers) else -1.0
-
-
-def _passband_weights(freqs, spl):
-    """Output-level weights emphasizing the passband (within 12 dB of peak SPL)."""
-    if spl is None:
-        return None
-    spl = np.asarray(spl, dtype=float)
-    if spl.shape != freqs.shape or np.count_nonzero(np.isfinite(spl)) < 2:
-        return None
-    finite = np.isfinite(spl)
-    peak = float(np.max(spl[finite]))
-    weights = np.zeros_like(spl)
-    band = finite & (spl >= peak - 12.0)
-    if np.count_nonzero(band) < 2:
-        band = finite
-    weights[band] = 10.0 ** ((spl[band] - peak) / 20.0)
-    return weights
-
-
-def _weighted_linfit(x, y, weights):
-    """Weighted least-squares slope/intercept for ``y ≈ intercept + slope*x``."""
-    total = float(np.sum(weights))
-    if total <= 0.0:
-        return 0.0, 0.0
-    x_mean = float(np.sum(weights * x) / total)
-    y_mean = float(np.sum(weights * y) / total)
-    sxx = float(np.sum(weights * (x - x_mean) ** 2))
-    if sxx <= 0.0:
-        return 0.0, y_mean
-    slope = float(np.sum(weights * (x - x_mean) * (y - y_mean)) / sxx)
-    return slope, y_mean - slope * x_mean
-
-
-def _flatten_phase_for_display(
-    frequencies,
-    phase_degrees,
-    spl_db=None,
-    *,
-    reference_distance_m=None,
-    sound_speed_m_per_s=343.0,
-    phase_time_convention=None,
-):
-    """Return ``(freqs, phase_deg)`` referenced and detrended for display.
-
-    Two steps: (1) remove the observer propagation delay ``2*pi*f*r/c`` so
-    ``np.unwrap`` can track the phase — an un-referenced r=2 m response wraps
-    ~100x by 20 kHz and would alias; (2) remove the residual group-delay slope
-    weighted by output level, so the curve sits flat where the speaker radiates
-    most and crossover/resonance deviations stay visible.
-    """
-    freqs = np.asarray(frequencies, dtype=float)
-    phase = np.asarray(phase_degrees, dtype=float)
-    n = min(freqs.size, phase.size)
-    if n == 0:
-        return np.array([], dtype=float), np.array([], dtype=float)
-    freqs, phase = freqs[:n], phase[:n]
-    spl = np.asarray(spl_db, dtype=float)[:n] if spl_db is not None and len(spl_db) >= n else None
-    finite = np.isfinite(freqs) & np.isfinite(phase) & (freqs > 0)
-    if not np.any(finite):
-        return np.array([], dtype=float), np.array([], dtype=float)
-    freqs, phase = freqs[finite], phase[finite]
-    if spl is not None:
-        spl = spl[finite]
-
-    radians = np.deg2rad(phase)
-    distance = float(reference_distance_m) if reference_distance_m else float("nan")
-    speed = float(sound_speed_m_per_s) if sound_speed_m_per_s else float("nan")
-    if np.isfinite(distance) and distance > 0.0 and np.isfinite(speed) and speed > 0.0:
-        sign = _phase_propagation_sign(phase_time_convention)
-        propagation = sign * (2.0 * np.pi * freqs * distance / speed)
-        radians = ((radians - propagation) + np.pi) % (2.0 * np.pi) - np.pi
-    deg = np.rad2deg(np.unwrap(radians))
-
-    weights = _passband_weights(freqs, spl)
-    if weights is not None and np.count_nonzero(weights) >= 2:
-        slope, intercept = _weighted_linfit(freqs, deg, weights)
-        deg = deg - (intercept + slope * freqs)
-    else:
-        deg = deg - float(np.median(deg))
-    return freqs, deg
-
-
 def _build_frequency_response_figure(
     curves,
     *,
@@ -372,12 +256,6 @@ def _build_frequency_response_figure(
     top_margin_db: float = 3.0,
     floor_db: float | None = None,
     figsize: tuple[float, float] = (10.0, 4.8),
-    phase_degrees=None,
-    phase_frequencies=None,
-    phase_weight_spl=None,
-    phase_reference_distance_m=None,
-    sound_speed_m_per_s: float = 343.0,
-    phase_time_convention=None,
     theme=None,
     colors=None,
     line_colors=None,
@@ -484,53 +362,7 @@ def _build_frequency_response_figure(
         )
         _add_log_grid(ax, ax.get_xlim()[0], ax.get_xlim()[1], detailed=True, theme=theme_obj)
 
-        phase_ax = None
-        if phase_degrees is not None:
-            ph_freqs = (
-                phase_frequencies
-                if phase_frequencies is not None
-                else response_curves[0].frequencies
-            )
-            weight_spl = (
-                phase_weight_spl
-                if phase_weight_spl is not None
-                else response_curves[0].spl_db
-            )
-            pf, pdeg = _flatten_phase_for_display(
-                ph_freqs,
-                phase_degrees,
-                weight_spl,
-                reference_distance_m=phase_reference_distance_m,
-                sound_speed_m_per_s=sound_speed_m_per_s,
-                phase_time_convention=phase_time_convention,
-            )
-            if pf.size:
-                phase_color = theme_obj.impedance_colors.get(
-                    "imaginary", theme_obj.reference_contour_color
-                )
-                phase_ax = ax.twinx()
-                _style_twin_axis(
-                    phase_ax,
-                    "Phase [deg]",
-                    label_color=phase_color,
-                    tick_color=phase_color,
-                    spine_color=phase_color,
-                    top_spine_color=theme_obj.spine_color,
-                )
-                phase_ax.semilogx(
-                    pf, pdeg, color=phase_color, linewidth=1.25,
-                    linestyle="--", label="Phase (referenced)",
-                )
-                abs_ph = np.abs(pdeg[np.isfinite(pdeg)])
-                span = float(np.percentile(abs_ph, 98)) if abs_ph.size else 180.0
-                span = max(30.0, min(360.0, span * 1.15))
-                phase_ax.set_ylim(-span, span)
-
         handles, labels = ax.get_legend_handles_labels()
-        if phase_ax is not None:
-            ph_handles, ph_labels = phase_ax.get_legend_handles_labels()
-            handles += ph_handles
-            labels += ph_labels
         _themed_legend(ax, handles, labels, theme=theme_obj, loc="best")
         fig.tight_layout(pad=1.5)
         return fig
@@ -553,20 +385,15 @@ def frequency_response_b64(
     colors=None,
     line_colors=None,
     response_colors=None,
-    phase_degrees=None,
-    phase_reference_distance_m=None,
-    sound_speed_m_per_s=343.0,
-    phase_time_convention=None,
     reference_frequencies=None,
     reference_spl=None,
     reference_label=None,
 ):
     """Render on-axis SPL vs frequency and return base64-encoded PNG.
 
-    When ``phase_degrees`` is supplied, an on-axis phase trace is drawn on a
-    secondary axis, referenced to the observer distance and detrended by output
-    level so it reads flat across the passband (see
-    :func:`_flatten_phase_for_display`).
+    Phase is not drawn here: a consumer that shows phase references it itself
+    and draws it through :func:`hornlab_plots.chart_spec_b64`, so there is one
+    phase convention, the consumer's.
     """
     fig = _build_frequency_response_figure(
         [FrequencyResponseCurve(frequencies, spl, "On-axis", role="combined")],
@@ -575,12 +402,6 @@ def frequency_response_b64(
         colors=colors,
         line_colors=line_colors,
         response_colors=response_colors,
-        phase_degrees=phase_degrees,
-        phase_frequencies=frequencies,
-        phase_weight_spl=spl,
-        phase_reference_distance_m=phase_reference_distance_m,
-        sound_speed_m_per_s=sound_speed_m_per_s if sound_speed_m_per_s is not None else 343.0,
-        phase_time_convention=phase_time_convention,
         reference_frequencies=reference_frequencies,
         reference_spl=reference_spl,
         reference_label=reference_label,
@@ -1197,9 +1018,6 @@ def render_all_charts_b64(
 
     charts = {}
 
-    phase_series = payload.get("phase_degrees")
-    if not _nonempty(phase_series):
-        phase_series = None
     charts["frequency_response"] = frequency_response_b64(
         freqs,
         spl,
@@ -1208,10 +1026,6 @@ def render_all_charts_b64(
         colors=colors,
         line_colors=line_colors,
         response_colors=response_colors,
-        phase_degrees=phase_series,
-        phase_reference_distance_m=payload.get("phase_reference_distance_m"),
-        sound_speed_m_per_s=payload.get("sound_speed_m_per_s"),
-        phase_time_convention=payload.get("phase_time_convention"),
         reference_frequencies=reference_freqs,
         reference_spl=reference.get("spl"),
         reference_label=reference_label,

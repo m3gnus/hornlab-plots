@@ -120,39 +120,6 @@ def test_frequency_response_b64():
     assert _is_valid_b64_png(b64)
 
 
-@pytest.mark.parametrize(
-    ("conventions", "expected"),
-    [
-        (
-            (None, "", "auto", "default", "legacy", "exp(-ikr)", "unknown"),
-            -1.0,
-        ),
-        (
-            (
-                "metal",
-                "exp(+ikr)",
-                "e(+ikr)",
-                "exp(+jkr)",
-                "hornlab-metal-bem",
-                "bempp",
-                "bempp-cl",
-                "bemppcl",
-                "hornlab-bempp-bem",
-                "bempp-cl-numba",
-                "bempp_cl_opencl",
-                "positive",
-                "positive-spatial",
-            ),
-            1.0,
-        ),
-    ],
-)
-def test_phase_propagation_sign_conventions(conventions, expected):
-    from hornlab_plots.charts import _phase_propagation_sign
-
-    assert all(_phase_propagation_sign(value) == expected for value in conventions)
-
-
 def test_save_frequency_response_plot_multi_trace_crossover(tmp_path):
     freqs = np.geomspace(100.0, 20000.0, 30)
     lf = 100.0 - 12.0 * np.log10(freqs / 800.0).clip(min=0.0)
