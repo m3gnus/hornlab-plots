@@ -198,3 +198,50 @@ def test_the_twin_axis_frame_takes_the_theme_colour():
         second = fig.axes[1]
         expected = to_hex(resolve_theme(theme).spine_color)
         assert {to_hex(spine.get_edgecolor()) for spine in second.spines.values()} == {expected}
+
+
+def _sphere_spec(kind, **overrides):
+    theta = list(range(0, 181, 10))
+    phi = list(range(0, 360, 15))
+    levels = [[-t / 6.0 - (p % 90) / 30.0 for p in phi] for t in theta]
+    levels[3][4] = None
+    spec = {"kind": kind, "title": kind, "subtitle": "1 kHz", "theta_deg": theta, "phi_deg": phi, "levels_db": levels}
+    spec.update(overrides)
+    return spec
+
+
+@pytest.mark.parametrize("kind", ["beam_map", "balloon"])
+def test_spherical_views_render_in_the_theme(kind):
+    _png(hlp.chart_spec_b64(_sphere_spec(kind), theme="classic"))
+    fig = build_chart_spec_figure(_sphere_spec(kind), theme="classic")
+    # A colour bar on the theme's heatmap ramp, spanning -30..0 dB.
+    bar = fig.axes[-1]
+    assert bar.get_ylim() == pytest.approx((-30.0, 0.0))
+
+
+def test_beam_map_draws_the_forward_hemisphere_with_phi_counter_clockwise():
+    fig = build_chart_spec_figure(_sphere_spec("beam_map"), theme="classic")
+    ax = fig.axes[0]
+    assert ax.get_rmax() == pytest.approx(90.0)
+    assert ax.get_theta_direction() == 1
+    mesh = ax.collections[0]
+    values = np.asarray(mesh.get_array()).reshape(19, 25)
+    # Missing samples read as the floor; the seam repeats the first azimuth.
+    assert values[3, 4] == pytest.approx(-30.0)
+    np.testing.assert_allclose(values[:, -1], values[:, 0])
+
+
+@pytest.mark.parametrize("bad", [
+    _sphere_spec("balloon", theta_deg=[0]),
+    _sphere_spec("balloon", phi_deg=list(range(0, 800))),
+    _sphere_spec("beam_map", levels_db=[[0.0]]),
+    _sphere_spec("beam_map", levels_db="x"),
+    _sphere_spec("beam_map", range_db=0),
+])
+def test_spherical_specs_are_checked(bad):
+    import matplotlib.pyplot as plt
+
+    open_before = set(plt.get_fignums())
+    with pytest.raises(ValueError):
+        hlp.chart_spec_b64(bad)
+    assert set(plt.get_fignums()) == open_before

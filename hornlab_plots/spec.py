@@ -36,6 +36,18 @@ Spec shape (``kind`` defaults to ``"lines"``)::
       "shade": [{"from": 90, "to": 180, "label": "Outside half-space"}],
     }
 
+    {
+      "kind": "beam_map" | "balloon",
+      "title": "Forward beam map", "subtitle": "1 kHz",
+      "theta_deg": [...], "phi_deg": [...],   # the solved spherical grid
+      "levels_db": [[...] per theta],          # dB re max at one frequency
+      "range_db": 30,
+    }
+
+``beam_map`` is the forward hemisphere seen head-on (radius = off-axis angle);
+``balloon`` is the 3D radiation surface from a fixed viewpoint. Both clip
+levels to -range..0 dB and read a missing sample as the floor.
+
 ``None`` values are gaps. Every series point is drawn as given: nothing is
 smoothed, resampled or re-referenced here, so the image carries exactly the
 numbers the consumer put on its screen.
@@ -50,6 +62,8 @@ from typing import Any
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.cm
+import matplotlib.colors
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Patch
@@ -62,6 +76,7 @@ from .style import apply_theme_overrides, theme_rc_context
 
 LINE_FIGSIZE = (10.0, 4.8)
 POLAR_FIGSIZE = (7.0, 7.0)
+SPHERE_FIGSIZE = (7.6, 6.6)
 # Screen widths are CSS pixels; the canonical charts draw a primary trace at
 # 1.65 pt against the screen's 2 px.
 _WIDTH_SCALE = 0.825
@@ -78,6 +93,8 @@ MAX_POINTS = 200_000
 MAX_BANDS = 64
 MAX_HLINES = 16
 MAX_SHADE = 8
+MAX_GRID_THETA = 361
+MAX_GRID_PHI = 721
 _LOG_SPAN_REFUSED = f"a log frequency axis must start above 0 and span at most {MAX_LOG_DECADES} decades"
 _LINESTYLES = {"solid": "-", "dashed": "--", "dotted": ":", "dashdot": "-."}
 
@@ -410,9 +427,120 @@ def _build_polar_figure(fig, spec: Mapping[str, Any], theme_obj):
     return fig
 
 
+def _spherical_levels(spec: Mapping[str, Any]):
+    """The (theta, phi, levels, range) of a spherical-grid spec, checked."""
+    theta = _floats(spec.get("theta_deg"))
+    phi = _floats(spec.get("phi_deg"))
+    rows = spec.get("levels_db")
+    if not isinstance(rows, (list, tuple)):
+        raise ValueError("levels_db must be a list of rows, one per theta")
+    if not 2 <= theta.size <= MAX_GRID_THETA or not 3 <= phi.size <= MAX_GRID_PHI:
+        raise ValueError(
+            f"a spherical grid needs 2 to {MAX_GRID_THETA} theta and 3 to {MAX_GRID_PHI} phi angles"
+        )
+    if not (np.all(np.isfinite(theta)) and np.all(np.isfinite(phi))):
+        raise ValueError("grid angles must be finite")
+    if len(rows) != theta.size or any(
+        not isinstance(row, (list, tuple)) or len(row) != phi.size for row in rows
+    ):
+        raise ValueError("levels_db must have one row per theta and one value per phi")
+    levels = np.asarray([_floats(row) for row in rows], dtype=float)
+    span = 30.0 if spec.get("range_db") is None else float(spec["range_db"])
+    if not 0.0 < span <= 120.0:
+        raise ValueError("range_db must lie above 0 and at or below 120 dB")
+    # As on screen: the ramp spans -range..0 dB and a missing sample reads as
+    # the bottom of it.
+    levels = np.clip(np.where(np.isfinite(levels), levels, -span), -span, 0.0)
+    return theta, phi, levels, span
+
+
+def _wrapped(phi: np.ndarray, levels: np.ndarray):
+    """Close the azimuth: repeat the first column at +360 degrees."""
+    return np.append(phi, phi[0] + 360.0), np.concatenate([levels, levels[:, :1]], axis=1)
+
+
+def _level_colorbar(fig, ax, mappable, theme_obj, span: float) -> None:
+    bar = fig.colorbar(mappable, ax=ax, shrink=0.72, pad=0.08)
+    bar.set_label("Level [dB re max]", color=theme_obj.text_color, fontsize=10)
+    bar.ax.tick_params(colors=theme_obj.tick_color, labelsize=8)
+    bar.outline.set_edgecolor(theme_obj.spine_color)
+    bar.set_ticks(np.arange(-span, 0.1, 10.0 if span >= 30 else 5.0))
+
+
+def _heading(fig, spec: Mapping[str, Any], theme_obj) -> None:
+    fig.suptitle(str(spec.get("title") or ""), y=0.975, color=theme_obj.text_color, fontsize=13, fontweight="600")
+    if spec.get("subtitle"):
+        fig.text(0.5, 0.935, str(spec["subtitle"]), ha="center", va="top", fontsize=9, color=theme_obj.tick_color)
+
+
+def _build_beam_map_figure(fig, spec: Mapping[str, Any], theme_obj):
+    """The forward hemisphere seen head-on: radius is the off-axis angle (0-90 deg), angle is phi."""
+    theta, phi, levels, span = _spherical_levels(spec)
+    phi, levels = _wrapped(phi, levels)
+    fig.patch.set_facecolor(theme_obj.figure_bg)
+    ax = fig.add_subplot(projection="polar")
+    ax.set_facecolor(theme_obj.axes_bg)
+    # phi = 0 points right and phi grows counter-clockwise, as on screen.
+    ax.set_theta_zero_location("E")
+    ax.set_theta_direction(1)
+    mesh = ax.pcolormesh(
+        np.radians(phi), theta, levels, shading="gouraud",
+        cmap=theme_obj.heatmap_cmap, vmin=-span, vmax=0.0,
+    )
+    ax.set_rlim(0.0, 90.0)
+    ax.set_rgrids([30.0, 60.0, 90.0], labels=["θ 30°", "θ 60°", "θ 90°"], angle=45.0, color=theme_obj.text_color, fontsize=8)
+    ax.set_thetagrids([0, 90, 180, 270], labels=["φ 0°", "φ 90°", "φ 180°", "φ 270°"], color=theme_obj.tick_color, fontsize=9)
+    ax.grid(True, color=theme_obj.text_color, alpha=0.6, linewidth=0.8)
+    ax.spines["polar"].set_color(theme_obj.spine_color)
+    _level_colorbar(fig, ax, mesh, theme_obj, span)
+    _heading(fig, spec, theme_obj)
+    return fig
+
+
+# The screen's default camera, (2.35, 1.55, 2.75) in the viewer's y-up frame,
+# seen from matplotlib's z-up frame (x, y, z) = (viewer z, x, y).
+BALLOON_AZIMUTH_DEG = math.degrees(math.atan2(2.35, 2.75))
+BALLOON_ELEVATION_DEG = math.degrees(math.atan2(1.55, math.hypot(2.35, 2.75)))
+
+
+def _build_balloon_figure(fig, spec: Mapping[str, Any], theme_obj):
+    """The 3D radiation balloon from the screen's default viewpoint."""
+    theta, phi, levels, span = _spherical_levels(spec)
+    phi, levels = _wrapped(phi, levels)
+    th, ph = np.meshgrid(np.radians(theta), np.radians(phi), indexing="ij")
+    # Radius as on screen: a small core at the floor, 1 at 0 dB.
+    radius = 0.1 + 0.9 * (1.0 + levels / span)
+    viewer_x = radius * np.sin(th) * np.cos(ph)
+    viewer_y = radius * np.sin(th) * np.sin(ph)
+    viewer_z = radius * np.cos(th)
+    norm = matplotlib.colors.Normalize(vmin=-span, vmax=0.0)
+    fig.patch.set_facecolor(theme_obj.figure_bg)
+    ax = fig.add_subplot(projection="3d")
+    ax.set_facecolor(theme_obj.axes_bg)
+    ax.plot_surface(
+        viewer_z, viewer_x, viewer_y, facecolors=theme_obj.heatmap_cmap(norm(levels)),
+        rstride=1, cstride=1, linewidth=0.15, edgecolor=(*matplotlib.colors.to_rgb(theme_obj.text_color), 0.12),
+        antialiased=True, shade=False,
+    )
+    # The viewer's axes helper: x red, y green, z blue, 1.22 long.
+    for (dx, dy, dz), color in (((0, 1.22, 0), "#E5484D"), ((0, 0, 1.22), "#3FA34D"), ((1.22, 0, 0), "#3B82F6")):
+        ax.plot([0, dx], [0, dy], [0, dz], color=color, linewidth=1.2)
+    for setter in (ax.set_xlim, ax.set_ylim, ax.set_zlim):
+        setter(-1.0, 1.0)
+    ax.set_box_aspect((1, 1, 1), zoom=1.35)
+    ax.view_init(elev=BALLOON_ELEVATION_DEG, azim=BALLOON_AZIMUTH_DEG)
+    ax.set_axis_off()
+    mappable = matplotlib.cm.ScalarMappable(norm=norm, cmap=theme_obj.heatmap_cmap)
+    _level_colorbar(fig, ax, mappable, theme_obj, span)
+    _heading(fig, spec, theme_obj)
+    return fig
+
+
 _BUILDERS = {
     "lines": (_build_lines_figure, LINE_FIGSIZE),
     "polar": (_build_polar_figure, POLAR_FIGSIZE),
+    "beam_map": (_build_beam_map_figure, SPHERE_FIGSIZE),
+    "balloon": (_build_balloon_figure, SPHERE_FIGSIZE),
 }
 
 
