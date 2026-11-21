@@ -162,3 +162,39 @@ def test_an_empty_chart_leaves_no_figure_open():
     open_before = set(plt.get_fignums())
     assert hlp.chart_spec_b64({"series": [{"x": [100, 200], "y": [None, None]}]}) is None
     assert set(plt.get_fignums()) == open_before
+
+
+@pytest.mark.parametrize("spec", [
+    {"hlines": [{"y": 0}] * 17, "series": [{"x": [100, 200], "y": [1, 2]}]},
+    {"bands": [{"x0": 100, "x1": 200}] * 65, "series": [{"x": [100, 200], "y": [1, 2]}]},
+    {"series": [{"x": [100, 200], "y": [1, 2]}] * 65},
+    {"series": [{"x": [100.0] * 20_001, "y": [1.0] * 20_001}]},
+    {"series": [{"x": [100.0] * 20_000, "y": [1.0] * 20_000}] * 11},
+    {"kind": "polar", "series": [], "shade": [{"from": 0, "to": 10}] * 9},
+    {"series": [{"x": "abc", "y": [1]}]},
+])
+def test_the_renderer_bounds_counts_itself(spec):
+    import time
+
+    import matplotlib.pyplot as plt
+
+    open_before = set(plt.get_fignums())
+    started = time.perf_counter()
+    with pytest.raises(ValueError):
+        hlp.chart_spec_b64(spec)
+    assert time.perf_counter() - started < 1.0
+    assert set(plt.get_fignums()) == open_before
+
+
+def test_the_twin_axis_frame_takes_the_theme_colour():
+    from matplotlib.colors import to_hex
+
+    spec = _lines_spec(y2={"label": "Phase"})
+    spec["series"][1]["axis"] = 1
+    for theme in ("classic", "console"):
+        from hornlab_plots.style import resolve_theme
+
+        fig = build_chart_spec_figure(spec, theme=theme)
+        second = fig.axes[1]
+        expected = to_hex(resolve_theme(theme).spine_color)
+        assert {to_hex(spine.get_edgecolor()) for spine in second.spines.values()} == {expected}

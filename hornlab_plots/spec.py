@@ -69,6 +69,15 @@ _WIDTH_SCALE = 0.825
 # drawn one by one, so an absurd step or span would take minutes.
 MAX_POLAR_RINGS = 60
 MAX_LOG_DECADES = 8
+# Counts a chart may ask for. Each band, line and sector is drawn as its own
+# artist, so they are bounded as well as the points. Waveguide Generator's
+# route model applies the same bounds before a request reaches here.
+MAX_SERIES = 64
+MAX_POINTS_PER_SERIES = 20_000
+MAX_POINTS = 200_000
+MAX_BANDS = 64
+MAX_HLINES = 16
+MAX_SHADE = 8
 _LOG_SPAN_REFUSED = f"a log frequency axis must start above 0 and span at most {MAX_LOG_DECADES} decades"
 _LINESTYLES = {"solid": "-", "dashed": "--", "dotted": ":", "dashdot": "-."}
 
@@ -166,6 +175,27 @@ def _entries(value, what: str) -> list[Mapping[str, Any]]:
     if not isinstance(value, (list, tuple)):
         raise ValueError(f"{what} must be a list")
     return [_mapping(item, f"each entry of {what}") for item in value]
+
+
+def _check_counts(spec: Mapping[str, Any]) -> None:
+    """Refuse a spec asking for more artists or points than any chart needs."""
+    for key, cap in (("series", MAX_SERIES), ("bands", MAX_BANDS), ("hlines", MAX_HLINES), ("shade", MAX_SHADE)):
+        entries = _entries(spec.get(key), key)
+        if len(entries) > cap:
+            raise ValueError(f"a chart may have at most {cap} {key}")
+    total = 0
+    for series in _entries(spec.get("series"), "series"):
+        for key in ("x", "y", "angle", "r", "markers"):
+            values = series.get(key)
+            if values is None:
+                continue
+            if not isinstance(values, (list, tuple, np.ndarray)):
+                raise ValueError(f"series {key} must be a list")
+            if len(values) > MAX_POINTS_PER_SERIES:
+                raise ValueError(f"a series may have at most {MAX_POINTS_PER_SERIES} points")
+        total += len(series.get("x") or series.get("angle") or [])
+    if total > MAX_POINTS:
+        raise ValueError(f"a chart may draw at most {MAX_POINTS} points")
 
 
 def _build_lines_figure(fig, spec: Mapping[str, Any], theme_obj):
@@ -272,6 +302,10 @@ def _build_lines_figure(fig, spec: Mapping[str, Any], theme_obj):
             tick_color=theme_obj.tick_color,
             spine_color=theme_obj.spine_color,
         )
+        # The twin draws its own frame over the main axes': keep all of it in
+        # the theme, not only the right-hand side the helper styles.
+        for side in ("left", "top", "bottom"):
+            second.spines[side].set_color(theme_obj.spine_color)
         y2_lo, y2_hi = _limits(y2)
         if y2_lo is not None or y2_hi is not None:
             second.set_ylim(y2_lo, y2_hi)
@@ -389,6 +423,7 @@ def build_chart_spec_figure(spec: Mapping[str, Any], *, theme=None):
     if kind not in _BUILDERS:
         raise ValueError(f"chart kind must be one of: {', '.join(_BUILDERS)}")
     builder, figsize = _BUILDERS[kind]
+    _check_counts(spec)
     theme_obj = apply_theme_overrides(theme)
     with theme_rc_context(theme_obj):
         fig = plt.figure(figsize=figsize)
