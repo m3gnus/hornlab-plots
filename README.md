@@ -25,7 +25,7 @@ thin wrappers over this package; other downstream tooling imports it directly.
 
 Numpy-first, opinionated styling baked in. All public functions accept
 small numpy arrays plus a handful of styling kwargs and return either a
-base64-encoded PNG string (for HTTP routes), a PIL Image, or write to
+base64-encoded PNG string (for HTTP routes) or write to
 disk when an output path is supplied.
 
 Project-specific templates live with their owning tools. `hornlab-plots`
